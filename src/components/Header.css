@@ -1,0 +1,304 @@
+/* Header Styles */
+.header {
+  width: 100%;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 0;
+  border-radius: 0;
+  border-bottom: 3px solid #1a5490;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  max-width: 100%;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.menu-button {
+  background: #1a5490;
+  color: white;
+  border: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(26, 84, 144, 0.2);
+}
+
+.menu-button:hover {
+  background: #144070;
+  box-shadow: 0 4px 10px rgba(26, 84, 144, 0.3);
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #1a5490 0%, #2d7dd8 100%);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.title-section h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a202c;
+  letter-spacing: -0.5px;
+}
+
+.title-section .subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #718096;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.exchange-rates {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.rate-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  min-width: 80px;
+}
+
+.rate-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a5568;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rate-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.rate-loading {
+  font-size: 12px;
+  color: #718096;
+  font-style: italic;
+}
+
+.user-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+}
+
+.user-role {
+  font-size: 12px;
+  color: #718096;
+  margin: 0;
+  padding: 2px 8px;
+  background: #edf2f7;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.logout-button {
+  background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 6px rgba(229, 62, 62, 0.3);
+}
+
+.logout-button:hover {
+  background: linear-gradient(135deg, #c53030 0%, #9c2626 100%);
+  box-shadow: 0 4px 10px rgba(229, 62, 62, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Responsive Design */
+
+/* Tablet - 1024px ve altı */
+@media (max-width: 1024px) {
+  .header-content {
+    padding: 12px 24px;
+  }
+
+  .header-left {
+    gap: 16px;
+  }
+
+  .title-section h1 {
+    font-size: 20px;
+  }
+
+  .exchange-rates {
+    gap: 12px;
+  }
+
+  .rate-item {
+    min-width: 70px;
+    padding: 6px 10px;
+  }
+}
+
+/* Mobil - 768px ve altı */
+@media (max-width: 768px) {
+  .header-content {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .header-left {
+    gap: 12px;
+    flex: 1;
+  }
+
+  .logo {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .title-section h1 {
+    font-size: 18px;
+  }
+
+  .title-section .subtitle {
+    font-size: 12px;
+  }
+
+  .header-right {
+    gap: 16px;
+  }
+
+  /* Döviz kurlarını gizle */
+  .exchange-rates {
+    display: none;
+  }
+
+  .user-info {
+    display: none;
+  }
+
+  .logout-button {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}
+
+/* Küçük mobil - 480px ve altı */
+@media (max-width: 480px) {
+  .header-content {
+    padding: 8px 12px;
+  }
+
+  .header-left {
+    gap: 8px;
+  }
+
+  .menu-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .logo {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+  }
+
+  .title-section h1 {
+    font-size: 16px;
+  }
+
+  .title-section .subtitle {
+    display: none;
+  }
+
+  .logout-button {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .logout-button span {
+    display: none;
+  }
+}
+
+/* Çok küçük ekranlar - 320px ve altı */
+@media (max-width: 320px) {
+  .header-content {
+    padding: 6px 8px;
+  }
+
+  .title-section h1 {
+    font-size: 14px;
+  }
+
+  .logout-button {
+    padding: 4px 8px;
+    min-width: 32px;
+  }
+}
