@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import QRCode from "qrcode";
 import { Order, OrderStatus, Firm, Workshop, OrderUnit } from "../types";
 import {
   orderService,
@@ -9,6 +10,8 @@ import {
 } from "../services/dataService";
 import { useAuth } from "../context/AuthContext";
 import ImageManager from "../components/ImageManager";
+import { formatCurrency, formatNumber } from "../utils/formatters";
+import PageLoader from "../components/PageLoader";
 import "./Orders.css";
 
 const Orders: React.FC = () => {
@@ -48,6 +51,13 @@ const Orders: React.FC = () => {
     eur: null,
   });
 
+  // QR Print Modal state
+  const [qrPrintModal, setQrPrintModal] = useState<{
+    show: boolean;
+    order: Order | null;
+    qrCodeDataUrl: string | null;
+  }>({ show: false, order: null, qrCodeDataUrl: null });
+
   // Arama ve sıralama state'leri
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [sortConfig, setSortConfig] = useState<{
@@ -60,6 +70,25 @@ const Orders: React.FC = () => {
 
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // QR Modal'ı aç
+  const handleShowQrModal = async (order: Order) => {
+    let qrDataUrl: string | null = null;
+    try {
+      if (order.qrCodeUrl || order.qrCode) {
+        qrDataUrl = await QRCode.toDataURL(
+          order.qrCodeUrl || order.qrCode || "",
+          {
+            width: 300,
+            margin: 2,
+          }
+        );
+      }
+    } catch (error) {
+      console.error("QR kod oluşturulamadı:", error);
+    }
+    setQrPrintModal({ show: true, order, qrCodeDataUrl: qrDataUrl });
+  };
 
   useEffect(() => {
     loadOrders();
@@ -100,9 +129,22 @@ const Orders: React.FC = () => {
       setLoading(true);
       const data = await orderService.getAll();
 
-      setAllOrders(data); // Tüm siparişleri kaydet
+      console.log("📦 Orders loaded from API:", data);
+      console.log("📊 Total orders count:", data.length);
+      if (data.length > 0) {
+        console.log("📋 Sample order structure:", data[0]);
+      }
 
-      let filteredData = data;
+      // Siparişleri oluşturulma tarihine göre tersten sırala (en yeni en üstte)
+      const sortedData = [...data].sort((a, b) => {
+        const dateA = new Date(a.createdAt || a.acceptanceDate || 0).getTime();
+        const dateB = new Date(b.createdAt || b.acceptanceDate || 0).getTime();
+        return dateB - dateA; // Tersten sıralama
+      });
+
+      setAllOrders(sortedData); // Tüm siparişleri kaydet
+
+      let filteredData = sortedData;
       if (statusFilter !== "all") {
         filteredData = filteredData.filter(
           (order) => order.status === statusFilter
@@ -191,12 +233,8 @@ const Orders: React.FC = () => {
       summary[statusKey].Count += 1;
       summary[statusKey].TotalQuantity += order.quantity || 0;
 
-      // Sadece tamamlanan siparişler için fiyat hesapla
-      if (
-        order.status === OrderStatus.Tamamlandi &&
-        order.price &&
-        order.quantity
-      ) {
+      // Tüm siparişler için fiyat hesapla (fiyat varsa)
+      if (order.price && order.quantity) {
         const totalPrice = order.price * order.quantity;
 
         // Döviz cinsine göre TL'ye çevir
@@ -292,20 +330,6 @@ const Orders: React.FC = () => {
       [OrderUnit.Takim]: "Takım",
     };
     return unitMap[unit ?? OrderUnit.Adet] || "Adet";
-  };
-
-  const formatPrice = (price: number): string => {
-    return new Intl.NumberFormat("tr-TR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(price);
-  };
-
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat("tr-TR", {
-      style: "currency",
-      currency: "TRY",
-    }).format(value);
   };
 
   // Sıralama fonksiyonu
@@ -423,33 +447,20 @@ const Orders: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="orders-container">
-        <div className="loading">Yükleniyor...</div>
-      </div>
-    );
+    return <PageLoader message="Siparişler yükleniyor..." />;
   }
 
   return (
     <div className="orders-container">
+      {/* Sayfa Başlığı ve Yeni Sipariş Butonu */}
       <div className="orders-header">
         <h1>Siparişler</h1>
         <button
-          onClick={() => navigate("/orders/new")}
           className="create-button"
+          onClick={() => navigate("/orders/new")}
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
           </svg>
           Yeni Sipariş
         </button>
@@ -470,11 +481,9 @@ const Orders: React.FC = () => {
                 <div className="summary-quantity">
                   {item.TotalQuantity} Adet
                 </div>
-                {item.Status === "Tamamlandı" && (
-                  <div className="summary-value">
-                    {formatCurrency(item.TotalValue)}
-                  </div>
-                )}
+                <div className="summary-value">
+                  Toplam: {formatCurrency(item.TotalValue)}
+                </div>
               </div>
             ))}
           </div>
@@ -613,18 +622,22 @@ const Orders: React.FC = () => {
               </th>
               <th>Birim</th>
               <th>Parça/Takım</th>
-              <th
-                className="sortable-header"
-                onClick={() => handleSort("price")}
-              >
-                Birim Fiyat
-                {sortConfig.key === "price" && (
-                  <span className="sort-indicator">
-                    {sortConfig.direction === "asc" ? " ↑" : " ↓"}
-                  </span>
-                )}
-              </th>
-              <th>Döviz</th>
+              {user?.role === "Manager" && (
+                <>
+                  <th
+                    className="sortable-header"
+                    onClick={() => handleSort("price")}
+                  >
+                    Birim Fiyat
+                    {sortConfig.key === "price" && (
+                      <span className="sort-indicator">
+                        {sortConfig.direction === "asc" ? " ↑" : " ↓"}
+                      </span>
+                    )}
+                  </th>
+                  <th>Döviz</th>
+                </>
+              )}
               <th
                 className="sortable-header"
                 onClick={() => handleSort("workshop")}
@@ -691,13 +704,14 @@ const Orders: React.FC = () => {
                   </span>
                 )}
               </th>
+              <th>QR Kod</th>
               <th>İşlemler</th>
             </tr>
           </thead>
           <tbody>
             {getProcessedOrders().length === 0 ? (
               <tr>
-                <td colSpan={14} style={{ textAlign: "center" }}>
+                <td colSpan={15} style={{ textAlign: "center" }}>
                   {searchTerm.trim()
                     ? "Arama kriterine uygun sipariş bulunamadı."
                     : "Henüz sipariş bulunmuyor."}
@@ -707,11 +721,7 @@ const Orders: React.FC = () => {
               getProcessedOrders().map((order) => (
                 <tr key={order.orderId}>
                   <td>{order.firm?.firmName || "-"}</td>
-                  <td>
-                    {order.model
-                      ? `${order.model.modelCode} - ${order.model.modelName}`
-                      : "-"}
-                  </td>
+                  <td>{order.model?.modelName || "-"}</td>
                   <td>{order.quantity || 0}</td>
                   <td>
                     <span className="unit-badge">
@@ -723,12 +733,16 @@ const Orders: React.FC = () => {
                       ? `${order.pieceCount} parça`
                       : "-"}
                   </td>
-                  <td>{order.price ? formatPrice(order.price) : "-"}</td>
-                  <td>
-                    <span className="currency-badge">
-                      {order.priceCurrency || order.currency || "TRY"}
-                    </span>
-                  </td>
+                  {user?.role === "Manager" && (
+                    <>
+                      <td>{order.price ? formatNumber(order.price) : "-"}</td>
+                      <td>
+                        <span className="currency-badge">
+                          {order.priceCurrency || order.currency || "TRY"}
+                        </span>
+                      </td>
+                    </>
+                  )}
                   <td>{order.workshop?.name || "-"}</td>
                   <td>
                     {order.operator
@@ -752,70 +766,104 @@ const Orders: React.FC = () => {
                       : "-"}
                   </td>
                   <td>
+                    {order.qrCodeUrl || order.qrCode ? (
+                      <button
+                        onClick={() => handleShowQrModal(order)}
+                        className="qr-button"
+                        title="QR Detayı Görüntüle"
+                      >
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect x="3" y="3" width="7" height="7"></rect>
+                          <rect x="14" y="3" width="7" height="7"></rect>
+                          <rect x="14" y="14" width="7" height="7"></rect>
+                          <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                      </button>
+                    ) : (
+                      <span style={{ color: "#999", fontSize: "12px" }}>-</span>
+                    )}
+                  </td>
+                  <td>
                     <div className="action-buttons">
-                      <button
-                        onClick={() =>
-                          navigate(`/orders/detail/${order.orderId}`)
-                        }
-                        className="detail-button"
-                        title="Detay"
-                      >
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                      {user?.role === "Manager" && (
+                        <button
+                          onClick={() =>
+                            navigate(`/orders/detail/${order.orderId}`)
+                          }
+                          className="detail-button"
+                          title="Detay"
                         >
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                          <circle cx="12" cy="12" r="3"></circle>
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() =>
-                          navigate(`/orders/edit/${order.orderId}`)
-                        }
-                        className="edit-button"
-                        title="Düzenle"
-                      >
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                          </svg>
+                        </button>
+                      )}
+                      {(user?.role === "Manager" ||
+                        user?.role === "Sekreterya") && (
+                        <button
+                          onClick={() =>
+                            navigate(`/orders/edit/${order.orderId}`)
+                          }
+                          className="edit-button"
+                          title="Düzenle"
                         >
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteOrder(order.orderId)}
-                        className="delete-button"
-                        title="Sil"
-                      >
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          </svg>
+                        </button>
+                      )}
+                      {user?.role === "Manager" && (
+                        <button
+                          onClick={() => handleDeleteOrder(order.orderId)}
+                          className="delete-button"
+                          title="Sil"
                         >
-                          <polyline points="3 6 5 6 21 6"></polyline>
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                          <line x1="10" y1="11" x2="10" y2="17"></line>
-                          <line x1="14" y1="11" x2="14" y2="17"></line>
-                        </svg>
-                      </button>
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                          </svg>
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setSelectedOrderForImages(order.orderId);
@@ -911,13 +959,30 @@ const Orders: React.FC = () => {
               </div>
 
               <div className="order-card-actions">
-                <button
-                  onClick={() => navigate(`/orders/detail/${order.orderId}`)}
-                  className="detail-button"
-                  title="Detay"
-                >
-                  Detay
-                </button>
+                {(order.qrCodeUrl || order.qrCode) && (
+                  <button
+                    onClick={() => handleShowQrModal(order)}
+                    className="qr-button"
+                    title="QR Kodu"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="3" y="3" width="7" height="7"></rect>
+                      <rect x="14" y="3" width="7" height="7"></rect>
+                      <rect x="14" y="14" width="7" height="7"></rect>
+                      <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                    QR
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setSelectedOrderForImages(order.orderId);
@@ -942,6 +1007,299 @@ const Orders: React.FC = () => {
             setSelectedOrderForImages(null);
           }}
         />
+      )}
+
+      {/* QR Print Modal */}
+      {qrPrintModal.show && qrPrintModal.order && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10000,
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "30px",
+              maxWidth: "500px",
+              width: "90%",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                color: "white",
+                padding: "15px",
+                borderRadius: "12px",
+                marginBottom: "20px",
+              }}
+            >
+              <h2 style={{ margin: "0 0 8px 0", fontSize: "24px" }}>
+                ✅ Sipariş QR Detayı
+              </h2>
+              <p style={{ margin: 0, fontSize: "14px", opacity: 0.9 }}>
+                Sipariş No: <strong>{qrPrintModal.order.orderId}</strong>
+              </p>
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <p
+                style={{
+                  fontSize: "16px",
+                  color: "#333",
+                  marginBottom: "15px",
+                  fontWeight: "600",
+                }}
+              >
+                📋 Sipariş Bilgileri
+              </p>
+              <div
+                style={{
+                  textAlign: "left",
+                  background: "#f8f9fa",
+                  padding: "15px",
+                  borderRadius: "8px",
+                  fontSize: "14px",
+                }}
+              >
+                <p style={{ margin: "6px 0" }}>
+                  <strong>Firma:</strong>{" "}
+                  {qrPrintModal.order.firm?.firmName || "-"}
+                </p>
+                <p style={{ margin: "6px 0" }}>
+                  <strong>Model:</strong>{" "}
+                  {qrPrintModal.order.model?.modelName || "-"}
+                </p>
+                <p style={{ margin: "6px 0" }}>
+                  <strong>Miktar:</strong> {qrPrintModal.order.quantity}
+                </p>
+                <p style={{ margin: "6px 0" }}>
+                  <strong>Atölye:</strong>{" "}
+                  {qrPrintModal.order.workshop?.name || "-"}
+                </p>
+              </div>
+            </div>
+
+            {qrPrintModal.qrCodeDataUrl ? (
+              <>
+                <div
+                  style={{
+                    background: "#f0f4ff",
+                    padding: "15px",
+                    borderRadius: "12px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: "14px",
+                      color: "#667eea",
+                      marginBottom: "10px",
+                      fontWeight: "600",
+                    }}
+                  >
+                    📱 QR Kod Hazır
+                  </p>
+                  <div
+                    style={{
+                      background: "white",
+                      padding: "15px",
+                      borderRadius: "8px",
+                      display: "inline-block",
+                    }}
+                  >
+                    <img
+                      src={qrPrintModal.qrCodeDataUrl}
+                      alt="Order QR Code"
+                      style={{
+                        width: "200px",
+                        height: "200px",
+                        display: "block",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    justifyContent: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      const printWindow = window.open("", "_blank");
+                      if (
+                        printWindow &&
+                        qrPrintModal.qrCodeDataUrl &&
+                        qrPrintModal.order
+                      ) {
+                        printWindow.document.write(`
+                          <html>
+                            <head>
+                              <title>QR Kod - ${
+                                qrPrintModal.order.orderId
+                              }</title>
+                              <style>
+                                body {
+                                  display: flex;
+                                  flex-direction: column;
+                                  align-items: center;
+                                  justify-content: center;
+                                  min-height: 100vh;
+                                  margin: 0;
+                                  font-family: Arial, sans-serif;
+                                }
+                                .qr-container {
+                                  text-align: center;
+                                  padding: 20px;
+                                }
+                                img {
+                                  width: 350px;
+                                  height: 350px;
+                                  margin: 20px 0;
+                                }
+                                .info {
+                                  margin: 10px 0;
+                                  font-size: 14px;
+                                }
+                                @media print {
+                                  body { margin: 0; }
+                                }
+                              </style>
+                            </head>
+                            <body>
+                              <div class="qr-container">
+                                <h2>Sipariş QR Kodu</h2>
+                                <img src="${
+                                  qrPrintModal.qrCodeDataUrl
+                                }" alt="QR Code" />
+                                <div class="info"><strong>Sipariş No:</strong> ${
+                                  qrPrintModal.order.orderId
+                                }</div>
+                                <div class="info"><strong>Firma:</strong> ${
+                                  qrPrintModal.order.firm?.firmName || "-"
+                                }</div>
+                                <div class="info"><strong>Model:</strong> ${
+                                  qrPrintModal.order.model?.modelName || "-"
+                                }</div>
+                                <div class="info"><strong>Miktar:</strong> ${
+                                  qrPrintModal.order.quantity
+                                }</div>
+                              </div>
+                            </body>
+                          </html>
+                        `);
+                        printWindow.document.close();
+                        setTimeout(() => {
+                          printWindow.print();
+                        }, 250);
+                      }
+                    }}
+                    style={{
+                      padding: "12px 24px",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      background:
+                        "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      transition: "transform 0.2s",
+                    }}
+                    onMouseOver={(e) =>
+                      (e.currentTarget.style.transform = "scale(1.05)")
+                    }
+                    onMouseOut={(e) =>
+                      (e.currentTarget.style.transform = "scale(1)")
+                    }
+                  >
+                    🖨️ QR Kodu Yazdır
+                  </button>
+
+                  <a
+                    href={qrPrintModal.qrCodeDataUrl || ""}
+                    download={`order-${qrPrintModal.order.orderId}-qr.png`}
+                    style={{
+                      padding: "12px 24px",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      background: "#28a745",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      textDecoration: "none",
+                      cursor: "pointer",
+                      display: "inline-block",
+                      transition: "transform 0.2s",
+                    }}
+                    onMouseOver={(e) =>
+                      (e.currentTarget.style.transform = "scale(1.05)")
+                    }
+                    onMouseOut={(e) =>
+                      (e.currentTarget.style.transform = "scale(1)")
+                    }
+                  >
+                    📥 QR Kodu İndir
+                  </a>
+                </div>
+              </>
+            ) : (
+              <div
+                style={{
+                  background: "#fff3cd",
+                  padding: "15px",
+                  borderRadius: "8px",
+                  marginBottom: "15px",
+                  color: "#856404",
+                  fontSize: "14px",
+                }}
+              >
+                <p>⚠️ QR kod oluşturulamadı.</p>
+              </div>
+            )}
+
+            <button
+              onClick={() =>
+                setQrPrintModal({
+                  show: false,
+                  order: null,
+                  qrCodeDataUrl: null,
+                })
+              }
+              style={{
+                marginTop: "15px",
+                padding: "10px 24px",
+                fontSize: "14px",
+                fontWeight: "500",
+                background: "#6c757d",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                width: "100%",
+              }}
+            >
+              Kapat
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

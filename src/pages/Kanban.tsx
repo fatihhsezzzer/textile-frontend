@@ -13,13 +13,20 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { orderService, exchangeRateService } from "../services/dataService";
-import { Order, OrderStatus } from "../types";
+import {
+  orderService,
+  exchangeRateService,
+  costService,
+} from "../services/dataService";
+import { Order, OrderStatus, OrderWorkshopCost } from "../types";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { formatCurrency } from "../utils/formatters";
+import PageLoader from "../components/PageLoader";
 import "./Kanban.css";
 import KanbanCard from "../components/KanbanCard";
 import KanbanColumn from "../components/KanbanColumn";
+import WorkshopCostModal from "../components/WorkshopCostModal";
 
 const Kanban: React.FC = () => {
   const { isAuthenticated } = useAuth();
@@ -28,9 +35,17 @@ const Kanban: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [exchangeRates, setExchangeRates] = useState<{
-    USD: number;
-    EUR: number;
-  }>({ USD: 34.5, EUR: 37.2 });
+    USD: number | null;
+    EUR: number | null;
+  }>({ USD: null, EUR: null });
+
+  // Workshop Cost Modal state
+  const [costModalOpen, setCostModalOpen] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    orderId: string;
+    newStatus: OrderStatus;
+    oldStatus: OrderStatus;
+  } | null>(null);
 
   // Kanban kolonları
   const columns: { id: OrderStatus; title: string; color: string }[] = [
@@ -68,8 +83,8 @@ const Kanban: React.FC = () => {
       const eurRate = rates.find((rate) => rate.currencyCode === "EUR");
 
       setExchangeRates({
-        USD: usdRate?.banknoteSelling || 34.5,
-        EUR: eurRate?.banknoteSelling || 37.2,
+        USD: usdRate?.banknoteSelling || null,
+        EUR: eurRate?.banknoteSelling || null,
       });
     } catch (error) {
       console.error("❌ Döviz kurları yüklenemedi:", error);
@@ -103,10 +118,12 @@ const Kanban: React.FC = () => {
 
       // Dövize göre TL'ye çevir
       let priceInTRY = basePrice;
-      if (currency === "USD") {
+      if (currency === "USD" && exchangeRates.USD) {
         priceInTRY = basePrice * exchangeRates.USD;
-      } else if (currency === "EUR") {
+      } else if (currency === "EUR" && exchangeRates.EUR) {
         priceInTRY = basePrice * exchangeRates.EUR;
+      } else if (currency !== "TRY" && currency !== "TL") {
+        priceInTRY = 0; // Kur yoksa dönüşüm yapılamaz
       }
       // TRY ise zaten TL
 
@@ -187,22 +204,52 @@ const Kanban: React.FC = () => {
       } to ${newStatus}`
     );
 
-    // Eski status'u sakla (hata durumunda geri dönmek için)
-    const oldStatus = draggedOrder.status;
+    // Eski status'u sakla
+    const oldStatus = draggedOrder.status as OrderStatus;
 
+    // Eğer atölyeden çıkıyorsa (İşlemde -> Tamamlandı veya İptal Edildi) ve atölye atanmışsa
+    // maliyet modalını aç
+    if (
+      oldStatus === OrderStatus.Islemde &&
+      (newStatus === OrderStatus.Tamamlandi ||
+        newStatus === OrderStatus.IptalEdildi) &&
+      draggedOrder.workshopId
+    ) {
+      console.log("💰 Opening cost modal for workshop exit");
+      setPendingStatusChange({
+        orderId: draggedOrderId,
+        newStatus: newStatus,
+        oldStatus: oldStatus,
+      });
+      setCostModalOpen(true);
+      return; // Modal açıldı, status güncellemesini bekle
+    }
+
+    // Diğer durumlarda direkt status güncelle
+    // newStatus burada kesinlikle tanımlı (yukarıda kontrol edildi)
+    await updateOrderStatus(
+      draggedOrderId,
+      newStatus as OrderStatus,
+      oldStatus
+    );
+  };
+
+  // Status güncelleme fonksiyonu
+  const updateOrderStatus = async (
+    orderId: string,
+    newStatus: OrderStatus,
+    oldStatus: OrderStatus
+  ) => {
     // Optimistic update - UI'ı hemen güncelle
     setOrders((prevOrders) =>
       prevOrders.map((o) =>
-        o.orderId === draggedOrderId ? { ...o, status: newStatus } : o
+        o.orderId === orderId ? { ...o, status: newStatus } : o
       )
     );
 
     try {
       // Backend'i güncelle
-      const result = await orderService.updateStatus(
-        draggedOrderId,
-        newStatus!
-      );
+      const result = await orderService.updateStatus(orderId, newStatus);
       console.log("✅ Status updated successfully", result);
 
       // Eğer Tamamlandı status'üne taşındıysa bildirim göster
@@ -215,7 +262,7 @@ const Kanban: React.FC = () => {
       // Hata durumunda geri al
       setOrders((prevOrders) =>
         prevOrders.map((o) =>
-          o.orderId === draggedOrderId ? { ...o, status: oldStatus } : o
+          o.orderId === orderId ? { ...o, status: oldStatus } : o
         )
       );
 
@@ -232,23 +279,56 @@ const Kanban: React.FC = () => {
     return new Date(dateString).toLocaleDateString("tr-TR");
   };
 
-  const formatCurrency = (amount?: number) => {
-    if (!amount || isNaN(amount)) return "₺0,00";
-    return new Intl.NumberFormat("tr-TR", {
-      style: "currency",
-      currency: "TRY",
-    }).format(amount);
+  // Modal'dan gelen maliyetleri kaydet ve status'ü güncelle
+  const handleCostsSave = async (
+    costs: Omit<
+      OrderWorkshopCost,
+      | "orderWorkshopCostId"
+      | "createdAt"
+      | "createdBy"
+      | "updatedAt"
+      | "updatedBy"
+      | "order"
+      | "workshop"
+      | "costItem"
+    >[]
+  ) => {
+    if (!pendingStatusChange) return;
+
+    try {
+      // Önce maliyetleri kaydet
+      console.log("💾 Saving workshop costs:", costs.length);
+      for (const cost of costs) {
+        await costService.addOrderWorkshopCost(cost);
+      }
+      console.log("✅ All costs saved successfully");
+
+      // Sonra status'ü güncelle
+      await updateOrderStatus(
+        pendingStatusChange.orderId,
+        pendingStatusChange.newStatus,
+        pendingStatusChange.oldStatus
+      );
+
+      // State'i temizle
+      setPendingStatusChange(null);
+    } catch (error: any) {
+      console.error("❌ Failed to save costs:", error);
+      throw new Error(
+        error.response?.data?.message || "Maliyetler kaydedilemedi!"
+      );
+    }
+  };
+
+  // Modal iptal edildiğinde
+  const handleCostsCancel = () => {
+    console.log("❌ Cost modal cancelled");
+    setCostModalOpen(false);
+    setPendingStatusChange(null);
   };
 
   if (loading) {
-    return (
-      <div className="kanban-container">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p className="loading-text">Siparişler yükleniyor...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader message="Siparişler yükleniyor..." />;
   }
 
   return (
@@ -333,6 +413,24 @@ const Kanban: React.FC = () => {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {/* Workshop Cost Modal */}
+      {pendingStatusChange && (
+        <WorkshopCostModal
+          isOpen={costModalOpen}
+          orderId={pendingStatusChange.orderId}
+          workshopId={
+            orders.find((o) => o.orderId === pendingStatusChange.orderId)
+              ?.workshopId || ""
+          }
+          workshopName={
+            orders.find((o) => o.orderId === pendingStatusChange.orderId)
+              ?.workshop?.name || "Atölye"
+          }
+          onClose={handleCostsCancel}
+          onSave={handleCostsSave}
+        />
+      )}
     </div>
   );
 };

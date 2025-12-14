@@ -85,7 +85,7 @@ code {
   .main-content {
     min-height: calc(100vh - 50px); /* Smaller mobile header */
     flex: 1 1 auto;
-    overflow-x: hidden; /* Prevent horizontal scroll issues */
+    /* overflow-x: hidden removed to allow kanban scroll */
   }
 }
 

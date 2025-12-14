@@ -11,7 +11,11 @@ import {
   OrderStatus,
   ExchangeRate,
   Currency,
+  User,
 } from "../types";
+
+// Cost service'ini import edelim
+export { costService } from "./costService";
 
 // Test servisi - authentication gerektirmez
 export const testService = {
@@ -76,10 +80,10 @@ const normalizeOrderStatus = (status: any): OrderStatus => {
 
   // Sayısal değeri enum'a çevir
   const statusMap: { [key: number]: OrderStatus } = {
-    0: OrderStatus.Atanmadi,
-    1: OrderStatus.Islemde,
-    2: OrderStatus.IptalEdildi,
-    3: OrderStatus.Tamamlandi,
+    1: OrderStatus.Atanmadi,
+    2: OrderStatus.Islemde,
+    3: OrderStatus.IptalEdildi,
+    4: OrderStatus.Tamamlandi,
   };
 
   return statusMap[status] || OrderStatus.Atanmadi;
@@ -88,10 +92,10 @@ const normalizeOrderStatus = (status: any): OrderStatus => {
 // Utility: Frontend'deki string enum'u backend için sayısal değere çevir
 const denormalizeOrderStatus = (status: OrderStatus): number => {
   const statusMap: { [key in OrderStatus]: number } = {
-    [OrderStatus.Atanmadi]: 0,
-    [OrderStatus.Islemde]: 1,
-    [OrderStatus.IptalEdildi]: 2,
-    [OrderStatus.Tamamlandi]: 3,
+    [OrderStatus.Atanmadi]: 1,
+    [OrderStatus.Islemde]: 2,
+    [OrderStatus.IptalEdildi]: 3,
+    [OrderStatus.Tamamlandi]: 4,
   };
 
   return statusMap[status];
@@ -99,20 +103,153 @@ const denormalizeOrderStatus = (status: OrderStatus): number => {
 
 // Order objelerindeki status'u normalize et (backend -> frontend)
 const normalizeOrder = (order: any): Order => {
-  return {
-    ...order,
+  console.log("🔄 Normalizing order:", order);
+
+  // Backend'den flat yapıda gelen veriyi nested yapıya çevir
+  const normalized: Order = {
+    orderId: order.orderId,
+    acceptanceDate: order.acceptanceDate,
+    completionDate: order.completionDate,
+    deadline: order.deadline,
+    firmId: order.firmId,
+    firm:
+      order.firm ||
+      (order.firmName
+        ? {
+            firmId: order.firmId,
+            firmName: order.firmName,
+            firmCode: order.firmCode || "",
+            contactPerson: order.firmContactPerson || "",
+            phone: order.firmPhone || "",
+            email: order.firmEmail || "",
+            address: order.firmAddress || "",
+            taxNumber: order.firmTaxNumber || "",
+            taxOffice: order.firmTaxOffice || "",
+            description: order.firmDescription || "",
+            createdAt: order.firmCreatedAt || "",
+            createdBy: order.firmCreatedBy || "",
+            updatedAt: order.firmUpdatedAt,
+            updatedBy: order.firmUpdatedBy,
+            isActive:
+              order.firmIsActive !== undefined ? order.firmIsActive : true,
+          }
+        : undefined),
+    modelId: order.modelId,
+    model:
+      order.model ||
+      (order.modelName
+        ? {
+            modelId: order.modelId,
+            modelName: order.modelName,
+            modelCode: order.modelCode || "",
+            description: order.modelDescription || "",
+            season: order.modelSeason || "",
+            category: order.modelCategory || "",
+            color: order.modelColor || "",
+            size: order.modelSize || "",
+            fabric: order.modelFabric || "",
+            imageUrl: order.modelImageUrl || "",
+            estimatedPrice: order.modelEstimatedPrice,
+            estimatedProductionTime: order.modelEstimatedProductionTime,
+          }
+        : undefined),
+    quantity: order.quantity,
+    unit: order.orderUnitId !== undefined ? order.orderUnitId : undefined,
+    pieceCount: order.pieceCount,
+    price: order.price,
+    priceCurrency: order.priceCurrency,
+    currency: order.priceCurrency, // Geriye dönük uyumluluk
+    workshopId: order.workshopId,
+    workshop:
+      order.workshop ||
+      (order.workshopName
+        ? {
+            workshopId: order.workshopId,
+            name: order.workshopName,
+            description: order.workshopDescription || "",
+            location: order.workshopLocation || "",
+            contactPerson: order.workshopContactPerson || "",
+            phone: order.workshopPhone || "",
+          }
+        : undefined),
+    operatorId: order.operatorId,
+    operator:
+      order.operator ||
+      (order.operatorName
+        ? {
+            operatorId: order.operatorId,
+            firstName:
+              order.operatorFirstName ||
+              order.operatorName.split(" ")[0] ||
+              order.operatorName,
+            lastName:
+              order.operatorLastName ||
+              order.operatorName.split(" ").slice(1).join(" ") ||
+              "",
+            phone: order.operatorPhone || "",
+            email: order.operatorEmail || "",
+            specialization: order.operatorSpecialization || "",
+            workshopId: order.workshopId,
+            workshop: order.workshop,
+          }
+        : undefined),
+    priority: order.priority,
+    note: order.note,
+    invoice: order.invoice,
+    invoiceNumber: order.invoiceNumber,
     status:
-      order.status !== undefined
+      order.orderStatusId !== undefined
+        ? normalizeOrderStatus(order.orderStatusId)
+        : order.status !== undefined
         ? normalizeOrderStatus(order.status)
         : OrderStatus.Atanmadi,
+    qrCodeUrl: order.qrCodeUrl,
+    qrCode: order.qrCodeUrl, // Geriye dönük uyumluluk
+    images:
+      order.images ||
+      (order.imageUrls
+        ? order.imageUrls.map((url: string, index: number) => ({
+            orderImageId: `${order.orderId}-${index}`,
+            orderId: order.orderId,
+            imageUrl: url,
+            description: "",
+            displayOrder: index,
+          }))
+        : []),
+    orderTechnics:
+      order.orderTechnics ||
+      (order.technicNames
+        ? order.technicNames.map((name: string, index: number) => ({
+            orderTechnicId: `${order.orderId}-technic-${index}`,
+            orderId: order.orderId,
+            technicId: "",
+            technic: {
+              technicId: "",
+              name: name,
+              description: "",
+              category: "",
+            },
+          }))
+        : []),
+    createdAt: order.createdAt || new Date().toISOString(),
+    createdBy: order.createdBy || "",
+    updatedAt: order.updatedAt,
+    updatedBy: order.updatedBy,
+    isActive: order.isActive !== undefined ? order.isActive : true,
   };
+
+  return normalized;
 };
 
 // Order objelerindeki status'u denormalize et (frontend -> backend)
 const denormalizeOrder = (order: Order): any => {
+  const { status, ...rest } = order;
   return {
-    ...order,
-    status: order.status ? denormalizeOrderStatus(order.status) : 0,
+    ...rest,
+    orderStatusId:
+      status !== undefined && status !== null
+        ? denormalizeOrderStatus(status)
+        : 1, // Default: Atanmadi = 1
   };
 };
 
@@ -133,8 +270,14 @@ export const orderService = {
     // Status'u numeric'e çevir ve gönder
     const backendOrder = {
       ...order,
-      status: order.status ? denormalizeOrderStatus(order.status) : 0,
+      orderStatusId: order.status ? denormalizeOrderStatus(order.status) : 0,
     };
+    // status alanını gönderme
+    delete backendOrder.status;
+    console.log(
+      "[OrderService] Yeni sipariş oluşturuluyor, gönderilen data:",
+      backendOrder
+    );
     const response = await api.post<any>("/Order", backendOrder);
     // Response'u normalize et
     return normalizeOrder(response.data);
@@ -144,6 +287,18 @@ export const orderService = {
     // Status'u numeric'e çevir ve gönder
     const backendOrder = denormalizeOrder(order);
     await api.put(`/Order/${id}`, backendOrder);
+  },
+
+  // Yeni atama endpointi (workshop/operator/status)
+  assign: async (
+    id: string,
+    data: {
+      workshopId?: string | null;
+      operatorId?: string | null;
+      orderStatusId?: number | null;
+    }
+  ): Promise<void> => {
+    await api.put(`/Order/${id}/assign`, data);
   },
 
   delete: async (id: string): Promise<void> => {
@@ -232,10 +387,10 @@ export const orderService = {
     let statusParam = "";
     if (status) {
       const statusMap: { [key in OrderStatus]: number } = {
-        [OrderStatus.Atanmadi]: 0,
-        [OrderStatus.Islemde]: 1,
-        [OrderStatus.IptalEdildi]: 2,
-        [OrderStatus.Tamamlandi]: 3,
+        [OrderStatus.Atanmadi]: 1,
+        [OrderStatus.Islemde]: 2,
+        [OrderStatus.IptalEdildi]: 3,
+        [OrderStatus.Tamamlandi]: 4,
       };
       statusParam = statusMap[status].toString();
     }
@@ -265,10 +420,10 @@ export const orderService = {
 
     // String enum'u sayısal değere çevir (backend numeric enum bekliyor)
     const statusMap: { [key in OrderStatus]: number } = {
-      [OrderStatus.Atanmadi]: 0,
-      [OrderStatus.Islemde]: 1,
-      [OrderStatus.IptalEdildi]: 2,
-      [OrderStatus.Tamamlandi]: 3,
+      [OrderStatus.Atanmadi]: 1,
+      [OrderStatus.Islemde]: 2,
+      [OrderStatus.IptalEdildi]: 3,
+      [OrderStatus.Tamamlandi]: 4,
     };
 
     const numericStatus = statusMap[status];
@@ -331,6 +486,11 @@ export const modelService = {
     return response.data;
   },
 
+  getPriceHistory: async (id: string) => {
+    const response = await api.get(`/Model/${id}/prices`);
+    return response.data;
+  },
+
   create: async (model: Omit<Model, "modelId">): Promise<Model> => {
     const response = await api.post<Model>("/Model", model);
     return response.data;
@@ -346,6 +506,18 @@ export const workshopService = {
   create: async (workshop: Omit<Workshop, "workshopId">): Promise<Workshop> => {
     const response = await api.post<Workshop>("/Workshop", workshop);
     return response.data;
+  },
+
+  update: async (
+    id: string,
+    workshop: Partial<Workshop>
+  ): Promise<Workshop> => {
+    const response = await api.put<Workshop>(`/Workshop/${id}`, workshop);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/Workshop/${id}`);
   },
 };
 
@@ -392,5 +564,48 @@ export const exchangeRateService = {
   getCurrencies: async (): Promise<Currency[]> => {
     const response = await api.get<Currency[]>("/ExchangeRate/currencies");
     return response.data;
+  },
+};
+
+// User servisi - Modelist yönetimi
+export const userService = {
+  // Aktif modelistleri getir
+  getModelists: async (): Promise<User[]> => {
+    const response = await api.get<User[]>("/User/modelists");
+    return response.data;
+  },
+};
+
+// Modelist Order servisi - Modeliste atanan siparişler
+export const modelistOrderService = {
+  // Giriş yapan modeliste atanmış tüm siparişleri listeler
+  getMyOrders: async (status?: OrderStatus): Promise<Order[]> => {
+    const params = status !== undefined ? { status } : {};
+    const response = await api.get<Order[]>("/ModelistOrder", { params });
+    return response.data.map(normalizeOrder);
+  },
+
+  // Belirli bir sipariş detayını getirir (sadece kendi siparişi ise)
+  getOrderById: async (id: string): Promise<Order> => {
+    const response = await api.get<Order>(`/ModelistOrder/${id}`);
+    return normalizeOrder(response.data);
+  },
+
+  // Modelist için istatistikler
+  getStats: async (): Promise<{
+    total: number;
+    pending: number;
+    completed: number;
+    unassigned: number;
+  }> => {
+    const response = await api.get("/ModelistOrder/stats");
+    return response.data;
+  },
+
+  // Sipariş durumunu güncelle
+  updateStatus: async (orderId: string, status: OrderStatus): Promise<void> => {
+    await api.put(`/Order/${orderId}/assign`, {
+      orderStatusId: status,
+    });
   },
 };

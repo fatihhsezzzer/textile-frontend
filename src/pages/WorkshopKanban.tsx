@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -18,17 +18,27 @@ import {
   workshopService,
   operatorService,
   exchangeRateService,
+  costService,
 } from "../services/dataService";
-import { Order, Workshop, Operator, OrderStatus } from "../types";
+import {
+  Order,
+  Workshop,
+  Operator,
+  OrderStatus,
+  OrderWorkshopCost,
+} from "../types";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import PageLoader from "../components/PageLoader";
 import "./Kanban.css";
 import KanbanCard from "../components/KanbanCard";
 import KanbanColumn from "../components/KanbanColumn";
+import WorkshopTransferModal from "../components/WorkshopTransferModal";
 
 const WorkshopKanban: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const kanbanBoardRef = useRef<HTMLDivElement>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -38,18 +48,62 @@ const WorkshopKanban: React.FC = () => {
     [orderId: string]: string;
   }>({});
   const [exchangeRates, setExchangeRates] = useState<{
-    USD: number;
-    EUR: number;
-  }>({ USD: 34.5, EUR: 37.2 }); // Varsayılan kurlar
+    USD: number | null;
+    EUR: number | null;
+    GBP: number | null;
+    date: string;
+  }>({ USD: null, EUR: null, GBP: null, date: new Date().toISOString() });
 
-  // Operatör seçim modalı için state'ler
-  const [showOperatorModal, setShowOperatorModal] = useState(false);
+  // Transfer modalı için state'ler (operatör + maliyet)
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [pendingWorkshopChange, setPendingWorkshopChange] = useState<{
     orderId: string;
     newWorkshopId: string | null;
     oldWorkshopId: string | undefined;
+    orderQuantity?: number;
   } | null>(null);
   const [selectedOperatorId, setSelectedOperatorId] = useState<string>("");
+
+  // Mouse wheel ile yatay scroll için handler
+  useEffect(() => {
+    const kanbanBoard = kanbanBoardRef.current;
+    if (!kanbanBoard) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Yatay scroll varsa tarayıcının kendi işlemesine izin ver
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        return;
+      }
+
+      // Shift basılıysa varsayılan davranışı kullan
+      if (e.shiftKey) {
+        return;
+      }
+
+      // Dikey scroll'u yatay scroll'a çevir
+      e.preventDefault();
+      kanbanBoard.scrollLeft += e.deltaY;
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Sol/Sağ ok tuşları ile scroll
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        kanbanBoard.scrollLeft -= 100;
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        kanbanBoard.scrollLeft += 100;
+      }
+    };
+
+    kanbanBoard.addEventListener("wheel", handleWheel, { passive: false });
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      kanbanBoard.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   // Drag sensor ayarları - daha hassas
   const sensors = useSensors(
@@ -78,19 +132,23 @@ const WorkshopKanban: React.FC = () => {
       const rates = await exchangeRateService.getLatest();
       const usdRate = rates.find((rate) => rate.currencyCode === "USD");
       const eurRate = rates.find((rate) => rate.currencyCode === "EUR");
+      const gbpRate = rates.find((rate) => rate.currencyCode === "GBP");
 
       setExchangeRates({
-        USD: usdRate?.banknoteSelling || 34.5,
-        EUR: eurRate?.banknoteSelling || 37.2,
+        USD: usdRate?.banknoteSelling || null,
+        EUR: eurRate?.banknoteSelling || null,
+        GBP: gbpRate?.banknoteSelling || null,
+        date: usdRate?.rateDate || new Date().toISOString(),
       });
 
       console.log("💱 Döviz kurları yüklendi:", {
         USD: usdRate?.banknoteSelling,
         EUR: eurRate?.banknoteSelling,
+        GBP: gbpRate?.banknoteSelling,
+        date: usdRate?.rateDate,
       });
     } catch (error) {
       console.error("❌ Döviz kurları yüklenemedi:", error);
-      // Hata durumunda varsayılan kurlar kullanılacak
     }
   };
 
@@ -237,10 +295,12 @@ const WorkshopKanban: React.FC = () => {
 
       // Dövize göre TL'ye çevir
       let priceInTRY = basePrice;
-      if (currency === "USD") {
+      if (currency === "USD" && exchangeRates.USD) {
         priceInTRY = basePrice * exchangeRates.USD;
-      } else if (currency === "EUR") {
+      } else if (currency === "EUR" && exchangeRates.EUR) {
         priceInTRY = basePrice * exchangeRates.EUR;
+      } else if (currency !== "TRY" && currency !== "TL") {
+        priceInTRY = 0; // Kur yoksa dönüşüm yapılamaz
       }
       // TRY ise zaten TL
 
@@ -317,24 +377,33 @@ const WorkshopKanban: React.FC = () => {
       } to ${newWorkshopId}`
     );
 
-    // Atölye değişikliği varsa operatör seçimi için modal aç
+    // Transfer modalını aç (operatör + maliyet)
     setPendingWorkshopChange({
       orderId: draggedOrderId,
       newWorkshopId,
       oldWorkshopId: draggedOrder.workshopId,
+      orderQuantity: draggedOrder.quantity,
     });
     setSelectedOperatorId(draggedOrder.operatorId || "");
-    setShowOperatorModal(true);
+    setShowTransferModal(true);
   };
 
-  // Operatör seçimi onaylandığında çağrılır
-  const handleConfirmWorkshopChange = async () => {
+  // Transfer modalından gelen operatör + maliyet kaydet
+  const handleTransferSave = async (
+    operatorId: string,
+    costs: Omit<
+      OrderWorkshopCost,
+      | "orderWorkshopCostId"
+      | "createdAt"
+      | "createdBy"
+      | "updatedAt"
+      | "updatedBy"
+      | "order"
+      | "workshop"
+      | "costItem"
+    >[]
+  ) => {
     if (!pendingWorkshopChange) return;
-
-    if (!selectedOperatorId) {
-      alert("Lütfen bir operatör seçin!");
-      return;
-    }
 
     const { orderId, newWorkshopId, oldWorkshopId } = pendingWorkshopChange;
     const draggedOrder = orders.find((o) => o.orderId === orderId);
@@ -346,58 +415,100 @@ const WorkshopKanban: React.FC = () => {
       (w) => w.workshopId === newWorkshopId
     );
 
-    // Eğer "Biten İşler" veya "Done" atölyesine taşınıyorsa completionDate ekle ve status'u Done yap
+    // Önceki atölyeyi bul (maliyet kaydı için)
+    const previousWorkshop = workshops.find(
+      (w) => w.workshopId === oldWorkshopId
+    );
+
     const isMoveToCompleted =
       targetWorkshop &&
       (targetWorkshop.name.toLowerCase().includes("biten") ||
         targetWorkshop.name.toLowerCase().includes("done") ||
+        targetWorkshop.name.toLowerCase().includes("tamamlanan") ||
+        targetWorkshop.name.toLowerCase().includes("tamamlandı") ||
         targetWorkshop.name.toLowerCase().includes("tamamlan"));
 
-    // Optimistic update - UI'ı hemen güncelle
-    setOrders((prevOrders) =>
-      prevOrders.map((o) =>
-        o.orderId === orderId
-          ? {
-              ...o,
-              workshopId: newWorkshopId || undefined,
-              operatorId: selectedOperatorId,
-              ...(isMoveToCompleted && {
-                status: OrderStatus.Tamamlandi,
-              }),
-            }
-          : o
-      )
-    );
-
-    // Modal'ı kapat
-    setShowOperatorModal(false);
-    setPendingWorkshopChange(null);
-
     try {
-      // Önce workshop ve operator'u güncelle
-      const updateData = {
-        ...draggedOrder,
-        workshopId: newWorkshopId || undefined,
-        operatorId: selectedOperatorId,
-      };
+      // Maliyetleri kaydet (varsa)
+      if (costs.length > 0 && oldWorkshopId && draggedOrder.modelId) {
+        console.log("💾 Saving costs for model:", draggedOrder.modelId);
 
-      await orderService.update(orderId, updateData);
-      console.log("✅ Workshop and operator updated successfully");
+        for (const cost of costs) {
+          const modelCostData = {
+            modelId: draggedOrder.modelId,
+            orderId: orderId,
+            costItemId: cost.costItemId,
+            quantity: cost.quantityUsed,
+            unit: cost.unit, // Cost'tan gelen unit bilgisi
+            quantity2: cost.quantity2, // İkinci boyut (opsiyonel)
+            quantity3: cost.quantity3, // Üçüncü boyut (opsiyonel, referans)
+            unit2: cost.unit2, // İkinci birim (opsiyonel)
+            unit3: cost.unit3, // Üçüncü birim (opsiyonel, referans)
+            costUnitId3: cost.costUnitId3, // Üçüncü birim ID (referans)
+            unitPrice: cost.actualPrice,
+            currency: cost.currency,
+            usage: cost.notes || `${previousWorkshop?.name || "Atölyesi"}`, // Önceki atölye
+            priority: 1,
+            isActive: true,
+            usdRate: exchangeRates.USD || undefined,
+            eurRate: exchangeRates.EUR || undefined,
+            gbpRate: exchangeRates.GBP || undefined,
+            exchangeRateDate: exchangeRates.date,
+          };
 
-      // Eğer "Biten İşler"e taşındıysa, status'u Tamamlandı yap
-      if (isMoveToCompleted) {
-        await orderService.updateStatus(orderId, OrderStatus.Tamamlandi);
-        console.log(
-          "✅ Order status updated to Tamamlandı (status: 3) - backend will set completion date"
-        );
+          console.log("📤 Sending ModelCost data (API):", modelCostData);
+          try {
+            await costService.addModelCost(modelCostData);
+          } catch (error: any) {
+            console.warn(
+              "⚠️ Model cost save failed (may already exist):",
+              error.message
+            );
+          }
+        }
+        console.log("✅ Model costs saved");
       }
 
-      // UI'ı güncelle - backend'den gelen son hali alsın
+      // Status güncelleme mantığı
+      // 1. "Biten İşler"e taşındıysa -> Tamamlandı
+      // 2. Atanmadı'dan (oldWorkshopId yok) bir atölyeye atandıysa -> İşlemde
+      // 3. Bir atölyeden başka atölyeye taşındıysa -> İşlemde kalsın
+      let newStatus = draggedOrder.status;
+
+      if (isMoveToCompleted) {
+        newStatus = OrderStatus.Tamamlandi;
+      } else if (!oldWorkshopId && newWorkshopId) {
+        // Atanmadı'dan bir atölyeye atandı
+        newStatus = OrderStatus.Islemde;
+      } else if (
+        oldWorkshopId &&
+        newWorkshopId &&
+        draggedOrder.status === OrderStatus.Atanmadi
+      ) {
+        // Eğer bir şekilde status hala Atanmadı ise İşlemde yap
+        newStatus = OrderStatus.Islemde;
+      }
+
+      // Sonra workshop ve operator'u güncelle
+      // Yeni atama endpointi için payload
+      const assignPayload = {
+        workshopId: newWorkshopId,
+        operatorId: operatorId,
+        orderStatusId: newStatus,
+      };
+      console.log("📤 Sending Order assign data (API):", assignPayload);
+      await orderService.assign(orderId, assignPayload);
+      console.log("✅ Workshop, operator and status assigned successfully");
+
+      // UI'ı güncelle
       await loadData();
 
-      const operator = operators.find(
-        (op) => op.operatorId === selectedOperatorId
-      );
+      // Modal'ı kapat
+      setShowTransferModal(false);
+      setPendingWorkshopChange(null);
+      setSelectedOperatorId("");
+
+      const operator = operators.find((op) => op.operatorId === operatorId);
       const operatorName = operator
         ? `${operator.firstName} ${operator.lastName}`
         : "";
@@ -435,9 +546,9 @@ const WorkshopKanban: React.FC = () => {
     }
   };
 
-  // Operatör seçimi iptal edildiğinde
-  const handleCancelWorkshopChange = () => {
-    setShowOperatorModal(false);
+  // Transfer modalı iptal edildiğinde
+  const handleTransferCancel = () => {
+    setShowTransferModal(false);
     setPendingWorkshopChange(null);
     setSelectedOperatorId("");
   };
@@ -448,14 +559,7 @@ const WorkshopKanban: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="kanban-container">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p className="loading-text">Veriler yükleniyor...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader message="Atölye verileri yükleniyor..." />;
   }
 
   // Kolonları oluştur: Sadece atölyeler (atanmamış artık yok)
@@ -469,9 +573,6 @@ const WorkshopKanban: React.FC = () => {
     <div className="kanban-container">
       <div className="kanban-header">
         <h1>🏭 Atölye Kanban Board</h1>
-        <button onClick={loadData} className="refresh-button">
-          🔄 Yenile
-        </button>
       </div>
 
       <DndContext
@@ -480,45 +581,41 @@ const WorkshopKanban: React.FC = () => {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="kanban-board">
+        <div className="kanban-board" ref={kanbanBoardRef}>
           {columns.map((column) => {
             const columnOrders = getOrdersByWorkshop(column.id);
             const columnOrderIds = columnOrders.map((o) => o.orderId);
             const columnTotal = calculateColumnTotal(columnOrders);
 
             return (
-              <div
+              <KanbanColumn
                 key={column.id}
-                style={{ display: "flex", flexDirection: "column" }}
+                id={column.id}
+                title={column.title}
+                color={column.color}
+                count={columnOrders.length}
+                totalValue={columnTotal}
               >
-                <KanbanColumn
+                <SortableContext
+                  items={columnOrderIds}
+                  strategy={verticalListSortingStrategy}
                   id={column.id}
-                  title={column.title}
-                  color={column.color}
-                  count={columnOrders.length}
-                  totalValue={columnTotal}
                 >
-                  <SortableContext
-                    items={columnOrderIds}
-                    strategy={verticalListSortingStrategy}
-                    id={column.id}
-                  >
-                    <div className="kanban-cards">
-                      {columnOrders.length === 0 && (
-                        <div className="empty-column">Sipariş bulunmuyor</div>
-                      )}
-                      {columnOrders.map((order) => (
-                        <KanbanCard
-                          key={order.orderId}
-                          order={order}
-                          formatDate={formatDate}
-                          workshopDuration={orderDurations[order.orderId]}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </KanbanColumn>
-              </div>
+                  <div className="kanban-cards">
+                    {columnOrders.length === 0 && (
+                      <div className="empty-column">Sipariş bulunmuyor</div>
+                    )}
+                    {columnOrders.map((order) => (
+                      <KanbanCard
+                        key={order.orderId}
+                        order={order}
+                        formatDate={formatDate}
+                        workshopDuration={orderDurations[order.orderId]}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </KanbanColumn>
             );
           })}
         </div>
@@ -566,184 +663,32 @@ const WorkshopKanban: React.FC = () => {
         </DragOverlay>
       </DndContext>
 
-      {/* Operatör Seçim Modalı */}
-      {showOperatorModal && pendingWorkshopChange && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0, 0, 0, 0.7)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 9999,
-          }}
-        >
-          <div
-            style={{
-              background: "white",
-              borderRadius: "16px",
-              padding: "30px",
-              minWidth: "400px",
-              maxWidth: "500px",
-              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
-            }}
-          >
-            <h2 style={{ margin: "0 0 20px 0", color: "#333" }}>
-              👷 Operatör Seçin
-            </h2>
-            <p style={{ color: "#666", marginBottom: "20px" }}>
-              {pendingWorkshopChange.newWorkshopId ? (
-                <>
-                  Sipariş{" "}
-                  <strong>
-                    {
-                      workshops.find(
-                        (w) =>
-                          w.workshopId === pendingWorkshopChange.newWorkshopId
-                      )?.name
-                    }
-                  </strong>{" "}
-                  atölyesine taşınıyor. Bu atölyedeki bir operatör seçin.
-                </>
-              ) : (
-                "Atölye değiştiriyorsunuz. Lütfen bu sipariş için bir operatör seçin."
-              )}
-            </p>
-
-            <div style={{ marginBottom: "25px" }}>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: "8px",
-                  fontWeight: "600",
-                  color: "#333",
-                }}
-              >
-                Operatör *
-              </label>
-              <select
-                value={selectedOperatorId}
-                onChange={(e) => setSelectedOperatorId(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "2px solid #ddd",
-                  fontSize: "14px",
-                  outline: "none",
-                  transition: "border-color 0.2s",
-                }}
-                onFocus={(e) => (e.target.style.borderColor = "#667eea")}
-                onBlur={(e) => (e.target.style.borderColor = "#ddd")}
-              >
-                <option value="">-- Operatör Seçin --</option>
-                {operators
-                  .filter(
-                    (operator) =>
-                      operator.workshopId ===
-                      pendingWorkshopChange.newWorkshopId
-                  )
-                  .map((operator) => (
-                    <option
-                      key={operator.operatorId}
-                      value={operator.operatorId}
-                    >
-                      {operator.firstName} {operator.lastName}
-                      {operator.specialization
-                        ? ` - ${operator.specialization}`
-                        : ""}
-                    </option>
-                  ))}
-              </select>
-              {operators.filter(
-                (operator) =>
-                  operator.workshopId === pendingWorkshopChange.newWorkshopId
-              ).length === 0 && (
-                <p
-                  style={{
-                    marginTop: "8px",
-                    color: "#dc3545",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                  }}
-                >
-                  ⚠️ Bu atölyede kayıtlı operatör bulunmuyor!
-                </p>
-              )}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-                justifyContent: "flex-end",
-              }}
-            >
-              <button
-                onClick={handleCancelWorkshopChange}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background: "#f0f0f0",
-                  color: "#666",
-                  fontSize: "14px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-                onMouseOver={(e) =>
-                  (e.currentTarget.style.background = "#e0e0e0")
-                }
-                onMouseOut={(e) =>
-                  (e.currentTarget.style.background = "#f0f0f0")
-                }
-              >
-                ❌ İptal
-              </button>
-              <button
-                onClick={handleConfirmWorkshopChange}
-                disabled={!selectedOperatorId}
-                style={{
-                  padding: "10px 20px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background: selectedOperatorId
-                    ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                    : "#ccc",
-                  color: "white",
-                  fontSize: "14px",
-                  fontWeight: "600",
-                  cursor: selectedOperatorId ? "pointer" : "not-allowed",
-                  transition: "all 0.3s",
-                  boxShadow: selectedOperatorId
-                    ? "0 4px 12px rgba(102, 126, 234, 0.3)"
-                    : "none",
-                }}
-                onMouseOver={(e) => {
-                  if (selectedOperatorId) {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow =
-                      "0 6px 16px rgba(102, 126, 234, 0.4)";
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (selectedOperatorId) {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow =
-                      "0 4px 12px rgba(102, 126, 234, 0.3)";
-                  }
-                }}
-              >
-                ✅ Onayla
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Workshop Transfer Modal (Operatör + Maliyet) */}
+      {showTransferModal && pendingWorkshopChange && (
+        <WorkshopTransferModal
+          isOpen={showTransferModal}
+          orderId={pendingWorkshopChange.orderId}
+          orderQuantity={pendingWorkshopChange.orderQuantity}
+          oldWorkshopId={pendingWorkshopChange.oldWorkshopId || null}
+          oldWorkshopName={
+            workshops.find(
+              (w) => w.workshopId === pendingWorkshopChange.oldWorkshopId
+            )?.name || "Atanmamış"
+          }
+          newWorkshopId={pendingWorkshopChange.newWorkshopId || null}
+          newWorkshopName={
+            workshops.find(
+              (w) => w.workshopId === pendingWorkshopChange.newWorkshopId
+            )?.name || "Yeni Atölye"
+          }
+          operators={operators.filter(
+            (op) => op.workshopId === pendingWorkshopChange.oldWorkshopId
+          )}
+          selectedOperatorId={selectedOperatorId}
+          onOperatorChange={setSelectedOperatorId}
+          onClose={handleTransferCancel}
+          onSave={handleTransferSave}
+        />
       )}
     </div>
   );

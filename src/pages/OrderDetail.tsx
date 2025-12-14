@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { orderService } from "../services/dataService";
-import { Order, OrderStatus } from "../types";
+import { orderService, costService } from "../services/dataService";
+import { Order, OrderStatus, OrderWorkshopCost, ModelCost } from "../types";
+import { formatCurrency, formatNumber } from "../utils/formatters";
+import PageLoader from "../components/PageLoader";
 import "./OrderDetail.css";
 
 interface OrderLog {
@@ -31,6 +33,9 @@ const OrderDetail: React.FC = () => {
   const [order, setOrder] = useState<Order | null>(null);
   const [groupedChanges, setGroupedChanges] = useState<GroupedChange[]>([]);
   const [loading, setLoading] = useState(true);
+  const [orderCosts, setOrderCosts] = useState<OrderWorkshopCost[]>([]);
+  const [modelCosts, setModelCosts] = useState<ModelCost[]>([]);
+  const [costsLoading, setCostsLoading] = useState(false);
   const [imagePreviewModal, setImagePreviewModal] = useState<{
     show: boolean;
     imageUrl: string;
@@ -91,6 +96,44 @@ const OrderDetail: React.FC = () => {
     }
   };
 
+  // Order yüklendikten sonra maliyetleri yükle
+  useEffect(() => {
+    if (order) {
+      loadOrderCosts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.orderId, order?.modelId]);
+
+  const loadOrderCosts = async () => {
+    if (!orderId) return;
+    try {
+      setCostsLoading(true);
+
+      // Workshop maliyetlerini yükle
+      const workshopCosts = await costService.getOrderWorkshopCosts(orderId);
+      setOrderCosts(workshopCosts);
+
+      // Model maliyetlerini yükle (eğer model varsa)
+      if (order?.modelId) {
+        try {
+          const costs = await costService.getOrderModelCosts(
+            orderId,
+            order.modelId
+          );
+          setModelCosts(costs);
+        } catch (error) {
+          console.error("Failed to load model costs:", error);
+          // Model maliyetleri yoksa devam et
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load order costs:", error);
+      // Hata durumunda sessizce devam et, maliyet bilgisi opsiyonel
+    } finally {
+      setCostsLoading(false);
+    }
+  };
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-";
 
@@ -108,13 +151,6 @@ const OrderDetail: React.FC = () => {
       hour: "2-digit",
       minute: "2-digit",
     }).format(date);
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("tr-TR", {
-      style: "currency",
-      currency: "TRY",
-    }).format(amount);
   };
 
   const getChangeIcon = (changeType: string) => {
@@ -156,12 +192,7 @@ const OrderDetail: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="order-detail-loading">
-        <div className="spinner"></div>
-        <p>Yükleniyor...</p>
-      </div>
-    );
+    return <PageLoader message="Sipariş detayı yükleniyor..." />;
   }
 
   if (!order) {
@@ -203,10 +234,13 @@ const OrderDetail: React.FC = () => {
               <span className="info-value">{order.quantity} adet</span>
             </div>
             <div className="info-row">
-              <span className="info-label">Fiyat:</span>
+              <span className="info-label">Birim Fiyat:</span>
               <span className="info-value">
                 {order.price
-                  ? formatCurrency(order.price * order.quantity)
+                  ? formatCurrency(
+                      order.price,
+                      order.priceCurrency || order.currency || "TRY"
+                    )
                   : "-"}
               </span>
             </div>
@@ -335,6 +369,402 @@ const OrderDetail: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Combined Cost Summary */}
+      {(orderCosts.length > 0 || modelCosts.length > 0) && (
+        <div
+          className="costs-section"
+          style={{
+            marginTop: "30px",
+            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            color: "white",
+            borderRadius: "12px",
+            padding: "20px",
+          }}
+        >
+          <h2 style={{ color: "white", marginBottom: "20px" }}>
+            💰 Toplam Maliyet Özeti
+          </h2>
+          <div className="costs-summary-cards">
+            {orderCosts.length > 0 && (
+              <div
+                className="summary-card"
+                style={{ background: "rgba(255, 255, 255, 0.95)" }}
+              >
+                <div className="summary-icon">🏭</div>
+                <div className="summary-content">
+                  <h4>Atölye Maliyetleri</h4>
+                  <p
+                    className="summary-value"
+                    style={{ fontSize: "1.8em", color: "#667eea" }}
+                  >
+                    {formatCurrency(
+                      orderCosts.reduce((sum, c) => sum + c.totalCost, 0)
+                    )}
+                  </p>
+                  <small>{orderCosts.length} kalem</small>
+                </div>
+              </div>
+            )}
+            {modelCosts.length > 0 && (
+              <div
+                className="summary-card"
+                style={{ background: "rgba(255, 255, 255, 0.95)" }}
+              >
+                <div className="summary-icon">📊</div>
+                <div className="summary-content">
+                  <h4>Model Maliyetleri</h4>
+                  <p
+                    className="summary-value"
+                    style={{ fontSize: "1.8em", color: "#764ba2" }}
+                  >
+                    {formatCurrency(
+                      modelCosts.reduce((sum, c) => sum + (c.totalCost || 0), 0)
+                    )}
+                  </p>
+                  <small>{modelCosts.length} kalem</small>
+                </div>
+              </div>
+            )}
+            <div
+              className="summary-card"
+              style={{
+                background: "rgba(255, 255, 255, 0.95)",
+                border: "3px solid #ffd700",
+              }}
+            >
+              <div className="summary-icon">💎</div>
+              <div className="summary-content">
+                <h4>Genel Toplam</h4>
+                <p
+                  className="summary-value"
+                  style={{
+                    fontSize: "2em",
+                    color: "#f57c00",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {formatCurrency(
+                    orderCosts.reduce((sum, c) => sum + c.totalCost, 0) +
+                      modelCosts.reduce((sum, c) => sum + (c.totalCost || 0), 0)
+                  )}
+                </p>
+                <small>Tüm maliyetler</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workshop Costs Section */}
+      {orderCosts.length > 0 && (
+        <div className="costs-section">
+          <h2>💰 Atölye Maliyetleri</h2>
+          {costsLoading ? (
+            <div className="loading-costs">Maliyetler yükleniyor...</div>
+          ) : (
+            <div className="costs-summary">
+              <div className="costs-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Atölye</th>
+                      <th>Maliyet Kalemi</th>
+                      <th>Kategori</th>
+                      <th>Miktar</th>
+                      <th>Birim Fiyat</th>
+                      <th>Toplam</th>
+                      <th>Not</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderCosts.map((cost) => (
+                      <tr key={cost.orderWorkshopCostId}>
+                        <td>
+                          <strong>{cost.workshop?.name || "-"}</strong>
+                        </td>
+                        <td>{cost.costItem?.itemName || "-"}</td>
+                        <td>
+                          <span className="category-badge">
+                            {cost.costItem?.costCategory?.categoryName || "-"}
+                          </span>
+                        </td>
+                        <td>
+                          {cost.quantityUsed}{" "}
+                          <span className="unit-text">
+                            {cost.costItem?.costUnit?.unitCode ||
+                              cost.costItem?.unit ||
+                              ""}
+                          </span>
+                        </td>
+                        <td>
+                          {formatCurrency(cost.actualPrice, cost.currency)}
+                        </td>
+                        <td className="total-cell">
+                          <strong>
+                            {formatCurrency(cost.totalCost, cost.currency)}
+                          </strong>
+                        </td>
+                        <td>
+                          <small>{cost.notes || "-"}</small>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="total-row">
+                      <td colSpan={5} style={{ textAlign: "right" }}>
+                        <strong>TOPLAM MALİYET:</strong>
+                      </td>
+                      <td className="total-cell">
+                        <strong className="grand-total">
+                          {formatCurrency(
+                            orderCosts.reduce(
+                              (sum, cost) => sum + cost.totalCost,
+                              0
+                            )
+                          )}
+                        </strong>
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <div className="costs-summary-cards">
+                <div className="summary-card">
+                  <div className="summary-icon">🏭</div>
+                  <div className="summary-content">
+                    <h4>Kullanılan Atölye</h4>
+                    <p className="summary-value">
+                      {new Set(orderCosts.map((c) => c.workshopId)).size} atölye
+                    </p>
+                  </div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-icon">📦</div>
+                  <div className="summary-content">
+                    <h4>Toplam Kalem</h4>
+                    <p className="summary-value">{orderCosts.length} adet</p>
+                  </div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-icon">💵</div>
+                  <div className="summary-content">
+                    <h4>Ortalama Kalem Maliyeti</h4>
+                    <p className="summary-value">
+                      {formatCurrency(
+                        orderCosts.reduce((sum, c) => sum + c.totalCost, 0) /
+                          orderCosts.length
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Model Costs Section */}
+      {modelCosts.length > 0 && (
+        <div className="costs-section" style={{ marginTop: "30px" }}>
+          <h2>📊 Model Maliyetleri</h2>
+          {costsLoading ? (
+            <div className="loading-costs">Maliyetler yükleniyor...</div>
+          ) : (
+            <div className="costs-summary">
+              <div className="costs-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Öncelik</th>
+                      <th>Maliyet Kalemi</th>
+                      <th>Kategori</th>
+                      <th>Atölye</th>
+                      <th>Miktar 1</th>
+                      <th>Miktar 2</th>
+                      <th>Fire %</th>
+                      <th>Net Miktar</th>
+                      <th>Birim Fiyat</th>
+                      <th>Toplam</th>
+                      <th>Kullanım</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modelCosts
+                      .sort((a, b) => (a.priority || 999) - (b.priority || 999))
+                      .map((cost) => (
+                        <tr key={cost.modelCostId}>
+                          <td>
+                            <span
+                              style={{
+                                background: "#f0f8ff",
+                                color: "#007acc",
+                                padding: "4px 8px",
+                                borderRadius: "4px",
+                                fontWeight: "bold",
+                                fontSize: "12px",
+                              }}
+                            >
+                              #{cost.priority || "-"}
+                            </span>
+                          </td>
+                          <td>
+                            <strong>{cost.costItem?.itemName || "-"}</strong>
+                          </td>
+                          <td>
+                            <span className="category-badge">
+                              {cost.costItem?.costCategory?.categoryName || "-"}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ color: "#7c3aed", fontWeight: 500 }}>
+                              {cost.oldWorkshopName || "-"}
+                            </span>
+                          </td>
+                          <td>
+                            <strong>{cost.quantity}</strong>
+                            {cost.costItem?.costUnit && (
+                              <span
+                                style={{
+                                  marginLeft: "4px",
+                                  fontSize: "0.85em",
+                                  color: "#666",
+                                }}
+                              >
+                                {cost.costItem.costUnit.unitCode}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {cost.quantity2 ? (
+                              <>
+                                <strong>{cost.quantity2}</strong>
+                                {cost.unit2 && (
+                                  <span
+                                    style={{
+                                      marginLeft: "4px",
+                                      fontSize: "0.85em",
+                                      color: "#666",
+                                    }}
+                                  >
+                                    {cost.unit2}
+                                  </span>
+                                )}
+                                <div
+                                  style={{
+                                    fontSize: "0.75em",
+                                    color: "#ff9800",
+                                    marginTop: "2px",
+                                  }}
+                                >
+                                  {cost.quantity} × {cost.quantity2} ={" "}
+                                  {formatNumber(cost.quantity * cost.quantity2)}
+                                </div>
+                              </>
+                            ) : (
+                              <span style={{ color: "#ccc" }}>-</span>
+                            )}
+                          </td>
+                          <td>
+                            {cost.costItem?.wastagePercentage ? (
+                              <span style={{ color: "#ff9800" }}>
+                                %{cost.costItem.wastagePercentage}
+                              </span>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                          <td>
+                            {cost.actualQuantityNeeded ? (
+                              <strong style={{ color: "#2e7d32" }}>
+                                {formatNumber(cost.actualQuantityNeeded)}
+                              </strong>
+                            ) : (
+                              cost.quantity
+                            )}
+                          </td>
+                          <td>
+                            {cost.unitPrice &&
+                              formatCurrency(
+                                cost.unitPrice,
+                                cost.currency || "TRY"
+                              )}
+                          </td>
+                          <td className="total-cell">
+                            <strong>
+                              {cost.totalCost &&
+                                formatCurrency(
+                                  cost.totalCost,
+                                  cost.currency || "TRY"
+                                )}
+                            </strong>
+                          </td>
+                          <td>
+                            <small>{cost.usage || "-"}</small>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="total-row">
+                      <td colSpan={8} style={{ textAlign: "right" }}>
+                        <strong>TOPLAM MODEL MALİYET:</strong>
+                      </td>
+                      <td className="total-cell">
+                        <strong className="grand-total">
+                          {formatCurrency(
+                            modelCosts.reduce(
+                              (sum, cost) => sum + (cost.totalCost || 0),
+                              0
+                            )
+                          )}
+                        </strong>
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <div className="costs-summary-cards">
+                <div className="summary-card">
+                  <div className="summary-icon">🎨</div>
+                  <div className="summary-content">
+                    <h4>Model</h4>
+                    <p className="summary-value">
+                      {order?.model?.modelName || "Model bilgisi yok"}
+                    </p>
+                  </div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-icon">📦</div>
+                  <div className="summary-content">
+                    <h4>Toplam Kalem</h4>
+                    <p className="summary-value">{modelCosts.length} adet</p>
+                  </div>
+                </div>
+                <div className="summary-card">
+                  <div className="summary-icon">💵</div>
+                  <div className="summary-content">
+                    <h4>Ortalama Kalem Maliyeti</h4>
+                    <p className="summary-value">
+                      {formatCurrency(
+                        modelCosts.reduce(
+                          (sum, c) => sum + (c.totalCost || 0),
+                          0
+                        ) / modelCosts.length
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Timeline */}
       <div className="timeline-section">

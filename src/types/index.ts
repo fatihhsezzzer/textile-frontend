@@ -14,16 +14,26 @@ export interface LoginResponse {
 }
 
 export enum OrderStatus {
-  Atanmadi = 0, // Atanmadı
-  Islemde = 1, // İşlemde
-  IptalEdildi = 2, // İptal Edildi
-  Tamamlandi = 3, // Tamamlandı
+  Atanmadi = 1, // Atanmadı
+  Islemde = 2, // İşlemde
+  IptalEdildi = 3, // İptal Edildi
+  Tamamlandi = 4, // Tamamlandı
 }
 
 export enum OrderUnit {
-  Adet = 0,
-  Metre = 1,
-  Takim = 2,
+  Adet = 1, // Database ID: 1
+  Metre = 2, // Database ID: 2
+  Takim = 3, // Database ID: 3 (Takım birimi)
+}
+
+// Maliyet hesaplama tipleri
+export enum CalculationType {
+  Simple = 0, // Basit hesaplama - Quantity × UnitPrice
+  TwoDimensional = 1, // İki boyutlu - Quantity × Quantity2 × UnitPrice
+  PieceFitting = 2, // Varak/Sticker - (MaterialWidth/En) × (MaterialHeight/Boy) = adet/metre
+  MeterBased = 3, // Metre bazlı hesaplama
+  AreaBased = 4, // Alan bazlı (m²) hesaplama
+  PaintBased = 5, // Boya hesaplama - Litre × Çeşit Sayısı × Kat Sayısı
 }
 
 export interface ExchangeRate {
@@ -88,6 +98,26 @@ export interface Model {
   imageUrl?: string;
 }
 
+export interface ModelPriceHistoryItem {
+  orderId: string;
+  acceptanceDate: string;
+  price: number;
+  priceCurrency: string;
+  quantity: number;
+  orderUnitName: string;
+  firmName: string;
+  firmId: string;
+}
+
+export interface ModelPriceHistory {
+  modelId: string;
+  modelCode: string;
+  modelName: string;
+  currentPrice?: number;
+  currentPriceCurrency?: string;
+  priceHistory: ModelPriceHistoryItem[];
+}
+
 export interface Workshop {
   workshopId: string;
   name: string;
@@ -133,6 +163,7 @@ export interface OrderTechnic {
 export interface Order {
   orderId: string;
   acceptanceDate: string; // Backend: AcceptanceDate
+  modelistUserId?: string; // Modelist assignment for digital/sticket orders
   completionDate?: string; // Backend: CompletionDate (nullable)
   firmId: string; // Backend: FirmId
   firm?: Firm; // Navigation property
@@ -154,6 +185,8 @@ export interface Order {
   invoice?: string; // Backend: Invoice (nullable, max 100)
   invoiceNumber?: string; // Backend: InvoiceNumber (nullable, max 50)
   status?: OrderStatus; // Backend: Status (enum)
+  qrCodeUrl?: string; // Backend: QrCodeUrl (nullable)
+  qrCode?: string; // Eski alan - geriye dönük uyumluluk için
   images?: OrderImage[];
   orderTechnics?: OrderTechnic[];
   // AuditableEntity fields
@@ -162,4 +195,204 @@ export interface Order {
   updatedAt?: string;
   updatedBy?: string;
   isActive: boolean;
+}
+
+// Cost Management Types
+export interface CostUnit {
+  costUnitId: string;
+  unitCode: string;
+  unitName: string;
+  description?: string;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface CostCategory {
+  costCategoryId: string;
+  category: string; // Backend expects 'category' field
+  categoryName: string; // Keep for frontend compatibility
+  description?: string;
+  displayOrder?: number;
+  isActive: boolean;
+}
+
+export interface CostSubCategory {
+  costSubCategoryId: string; // GUID
+  costCategoryId: string; // GUID
+  subCategory: string; // Backend expects 'subCategory'
+  subCategoryName: string;
+  description?: string;
+  displayOrder: number;
+  isActive: boolean;
+  costCategory?: CostCategory;
+}
+
+export interface CostItem {
+  costItemId: string; // GUID
+  costCategoryId: string; // GUID
+  costUnitId?: string; // GUID - Yeni format
+  costUnitId2?: string; // GUID - İkinci birim (opsiyonel)
+  costUnitId3?: string; // GUID - Üçüncü birim (opsiyonel, sadece referans)
+  itemName: string;
+  description?: string;
+  unit?: string; // String format (unitCode) - Opsiyonel, hesaplama tipine göre belirlenir
+  unitName?: string; // Birim adı (Metre, Kilogram, Litre vb.) - Backend'den geliyor
+  unit2?: string; // İkinci birim adı (opsiyonel, çoklu boyut için) - DEPRECATED: costUnit2.unitName kullan
+  unitPrice: number;
+  currency: string;
+  supplier?: string;
+  wastagePercentage?: number; // Fire yüzdesi (0-100)
+  minimumOrderQuantity?: number;
+  discountPercentage?: number;
+  lastPriceUpdate: string;
+  isActive: boolean;
+  // Hesaplama tipi ve ilgili alanlar
+  calculationType?: CalculationType; // Hesaplama tipi (Simple, PieceFitting vb.)
+  materialWidth?: number; // Malzeme eni (Varak: 150, Sticker: 59)
+  materialHeight?: number; // Malzeme boyu per metre (100)
+  quantity1Label?: string; // 1. miktar başlığı ("En", "Miktar", "Kişi")
+  quantity2Label?: string; // 2. miktar başlığı ("Boy", "Süre", "Saat")
+  quantity3Label?: string; // 3. miktar başlığı ("Sipariş Adedi", "Adet")
+  // Navigation properties
+  costCategory?: CostCategory;
+  costUnit?: CostUnit; // Navigation property - Birinci birim
+  costUnit2?: CostUnit; // Navigation property - İkinci birim
+  costUnit3?: CostUnit; // Navigation property - Üçüncü birim (referans)
+}
+
+export interface ModelCost {
+  modelCostId: string;
+  modelId: string;
+  modelName?: string; // Backend'den flat DTO
+  modelCode?: string; // Backend'den flat DTO
+  orderId?: string; // Sipariş ID'si (opsiyonel - genel model maliyetleri için null olabilir)
+  orderAcceptanceDate?: string; // Backend'den flat DTO
+  firmId?: string; // Firma ID'si (flat DTO)
+  firmName?: string; // Firma adı (flat DTO)
+  oldWorkshopId?: string; // Atölye ID'si (flat DTO)
+  oldWorkshopName?: string; // Atölye adı (flat DTO)
+  costItemId: string;
+  costItemName?: string; // Backend'den flat DTO
+  costCategoryName?: string; // Backend'den flat DTO
+  quantity: number;
+  unit?: string;
+  quantity2?: number; // İkinci miktar (boy, kişi sayısı, süre vb.)
+  unit2?: string; // İkinci birim adı
+  quantity3?: number; // Üçüncü miktar (opsiyonel, referans)
+  unit3?: string; // Üçüncü birim adı (opsiyonel, referans)
+  costUnitId2?: string; // İkinci birim referansı
+  costUnitId3?: string; // Üçüncü birim referansı (opsiyonel, referans)
+  unitPrice?: number;
+  totalCost?: number;
+  currency?: string;
+  actualQuantityNeeded?: number;
+  wastagePercentage?: number; // Fire yüzdesi (0-100)
+  usage?: string;
+  notes?: string; // Backend'den flat DTO
+  priority?: number;
+  isActive: boolean;
+  usdRate?: number; // USD kuru (maliyet kaydedildiği andaki kur)
+  eurRate?: number; // EUR kuru (maliyet kaydedildiği andaki kur)
+  gbpRate?: number; // GBP kuru (maliyet kaydedildiği andaki kur)
+  exchangeRateDate?: string; // Kur tarihi
+  model?: Model; // Geriye dönük uyumluluk için
+  order?: Order; // Geriye dönük uyumluluk için
+  costItem?: CostItem; // Geriye dönük uyumluluk için
+  costUnit2?: CostUnit; // Geriye dönük uyumluluk için
+  costUnit3?: CostUnit; // Geriye dönük uyumluluk için
+}
+
+export interface ModelCostSummary {
+  modelId: string;
+  modelName: string;
+  totalItems: number;
+  totalCost: number;
+  currency: string;
+  costsByCategory: {
+    categoryName: string;
+    itemCount: number;
+    totalCost: number;
+    items: {
+      itemName: string;
+      quantity: number;
+      unit: string;
+      unitPrice: number;
+      totalCost: number;
+      usage?: string;
+    }[];
+  }[];
+}
+
+export interface WorkshopCostItem {
+  workshopCostItemId: string;
+  workshopId: string;
+  workshopName?: string;
+  costItemId: string;
+  costItemName?: string;
+  costItemDescription?: string;
+  categoryName?: string;
+  costUnitId?: string;
+  unitName?: string;
+  unitCode?: string;
+  costUnitId2?: string;
+  unitName2?: string;
+  unitCode2?: string;
+  costUnitId3?: string;
+  unitName3?: string;
+  unitCode3?: string;
+  // Hesaplama tipi ve özel miktar etiketleri (CostItem'dan gelen)
+  calculationType?: CalculationType;
+  materialWidth?: number; // Malzeme eni (Varak: 150, Sticker: 59)
+  materialHeight?: number; // Malzeme boyu per metre (100)
+  quantity1Label?: string;
+  quantity2Label?: string;
+  quantity3Label?: string;
+  standardPrice?: number;
+  standardCurrency?: string;
+  workshopSpecificPrice?: number;
+  workshopCurrency?: string;
+  workshopDiscountPercentage?: number;
+  effectivePrice: number;
+  effectiveCurrency?: string;
+  priority?: number;
+  isPreferred: boolean;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  workshop?: Workshop;
+  costItem?: CostItem; // Geriye dönük uyumluluk için
+}
+
+export interface OrderWorkshopCost {
+  orderWorkshopCostId: string;
+  orderId: string;
+  workshopId: string;
+  costItemId: string;
+  quantityUsed: number;
+  quantity2?: number; // İkinci boyut (opsiyonel)
+  quantity3?: number; // Üçüncü boyut (opsiyonel, referans)
+  unit?: string; // Birim (required by backend ModelCost)
+  unit2?: string; // İkinci birim (opsiyonel)
+  unit3?: string; // Üçüncü birim (opsiyonel, referans)
+  costUnitId3?: string; // Üçüncü birim ID (opsiyonel, referans)
+  wastagePercentage?: number; // Fire yüzdesi (0-100)
+  actualPrice: number;
+  currency: string;
+  totalCost: number;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  order?: Order;
+  workshop?: Workshop;
+  costItem?: CostItem;
 }

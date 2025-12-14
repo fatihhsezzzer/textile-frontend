@@ -1,6 +1,43 @@
 /* Global Styles */
+html {
+  width: 100%;
+  max-width: 100vw;
+}
+
 * {
   box-sizing: border-box;
+}
+
+:root {
+  /* Button Colors */
+  --btn-primary: #1976d2;
+  --btn-primary-hover: #1565c0;
+  --btn-primary-active: #0d47a1;
+
+  --btn-secondary: #2e7d32;
+  --btn-secondary-hover: #1b5e20;
+  --btn-secondary-active: #0f4c14;
+
+  --btn-danger: #d32f2f;
+  --btn-danger-hover: #c62828;
+  --btn-danger-active: #b71c1c;
+
+  --btn-warning: #ed6c02;
+  --btn-warning-hover: #e65100;
+  --btn-warning-active: #d84315;
+
+  --btn-info: #0288d1;
+  --btn-info-hover: #01579b;
+  --btn-info-active: #014572;
+
+  --btn-dark: #424242;
+  --btn-dark-hover: #303030;
+  --btn-dark-active: #212121;
+
+  /* Text Colors */
+  --text-primary: #1a1a1a;
+  --text-secondary: #666;
+  --text-light: #888;
 }
 
 body {
@@ -11,6 +48,13 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+  /* Prevent text size adjustment on mobile */
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  /* Enable smooth scrolling on mobile */
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100vw;
 }
 
 code {
@@ -41,6 +85,7 @@ h6 {
 img {
   max-width: 100%;
   height: auto;
+  display: block;
 }
 
 /* Global responsive buttons */
@@ -48,7 +93,33 @@ button {
   cursor: pointer;
   border: none;
   outline: none;
-  font-family: inherit;
+  /* Better touch target size on mobile */
+  min-height: 44px;
+  /* Prevent text selection on mobile */
+  -webkit-user-select: none;
+  user-select: none;
+  /* Improve button tap response */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Remove number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Prevent mouse wheel from changing number input values */
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+input[type="number"]:focus {
+  -moz-appearance: textfield;
 }
 
 /* Global responsive forms */
@@ -57,6 +128,22 @@ select,
 textarea {
   font-family: inherit;
   font-size: inherit;
+  /* Better touch target size on mobile */
+  min-height: 44px;
+}
+
+/* Better touch scrolling */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent zoom on focus for iOS */
+@media screen and (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 /* Global responsive tables */

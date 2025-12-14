@@ -160,6 +160,7 @@ const Register: React.FC = () => {
     { value: "Üretim", label: "Üretim" },
     { value: "Sekreterya", label: "Sekreterya" },
     { value: "Manager", label: "Manager" },
+    { value: "Modelist", label: "Desinatör" },
   ];
 
   return (

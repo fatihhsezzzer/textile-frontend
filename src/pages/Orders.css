@@ -3,18 +3,37 @@
   min-height: 100vh;
   background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
   padding: 0;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Orders sayfasında genel Header'ı daralt */
+.orders-container .header {
+  width: 97%;
+  max-width: 97%;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Header Section */
 .orders-header {
   background: white;
-  padding: 28px 40px;
+  padding: 28px 20px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 3px solid #667eea;
   margin-bottom: 32px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 97%;
+  max-width: 97%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .orders-header h1 {
@@ -32,7 +51,7 @@
 /* Create Button */
 .create-button {
   padding: 12px 28px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--btn-primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -40,7 +59,7 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -51,12 +70,12 @@
 }
 
 .create-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  background: var(--btn-primary-hover);
+  box-shadow: 0 6px 20px rgba(25, 118, 210, 0.5);
 }
 
 .create-button:hover svg {
-  transform: rotate(90deg) scale(1.1);
+  transform: scale(1.1);
 }
 
 .create-button:active {
@@ -74,16 +93,19 @@
 
 /* Status Summary Cards */
 .status-summary {
-  padding: 0 40px;
+  padding: 0 20px;
   margin-bottom: 32px;
 }
 
 .status-summary h3 {
-  color: #2d3748;
-  font-size: 20px;
+  color: #1a5490;
+  font-size: 16px;
   font-weight: 700;
   margin-bottom: 20px;
   letter-spacing: -0.3px;
+  text-transform: uppercase;
+  border-bottom: 2px solid #e8e8e8;
+  padding-bottom: 10px;
 }
 
 /* Summary Date Filters */
@@ -122,65 +144,70 @@
 
 .summary-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 20px;
 }
 
 .summary-card {
-  background: white;
-  border-radius: 12px;
+  background: #ffffff;
+  border-radius: 8px;
   padding: 24px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-  border-left: 4px solid #667eea;
-  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e8e8e8;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .summary-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .summary-status {
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
-  color: #718096;
+  color: #666;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
+  letter-spacing: 0.8px;
+  margin-bottom: 12px;
 }
 
 .summary-count {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
   color: #2d3748;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  line-height: 1;
 }
 
 .summary-quantity {
-  font-size: 16px;
-  font-weight: 600;
-  color: #38a169;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
   margin-bottom: 8px;
 }
 
 .summary-value {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: #667eea;
+  color: #2d3748;
 }
 
 /* Filters Section */
 .filters {
   display: flex;
   gap: 16px;
-  padding: 0 24px;
-  margin-bottom: 20px;
+  padding: 20px;
+  margin: 0 24px 20px;
   flex-wrap: wrap;
   background: white;
   border-radius: 12px;
-  margin: 0 24px 20px;
-  padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  width: calc(100% - 48px);
+  max-width: calc(100% - 48px);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .filter-group {
@@ -241,8 +268,9 @@
   border-radius: 12px;
   margin: 0 24px 24px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
+  overflow-x: auto;
   border: 1px solid #e2e8f0;
+  box-sizing: border-box;
 }
 
 /* Cards Container - default olarak gizli */
@@ -253,10 +281,11 @@
 .orders-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: auto;
 }
 
 .orders-table thead {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--btn-primary);
 }
 
 .orders-table th {
@@ -268,7 +297,7 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   white-space: nowrap;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--btn-primary);
 }
 
 .orders-table td {
@@ -392,6 +421,7 @@
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-wrap: nowrap;
 }
 
 .edit-button,
@@ -425,14 +455,14 @@
 }
 
 .detail-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--btn-primary);
   color: white;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.35);
 }
 
 .detail-button:hover {
   transform: translateY(-3px);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+  box-shadow: 0 6px 16px rgba(25, 118, 210, 0.5);
 }
 
 .detail-button:hover svg {
@@ -440,14 +470,15 @@
 }
 
 .edit-button {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  background: linear-gradient(135deg, #0288d1 0%, #0277bd 100%);
   color: white;
-  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.35);
+  box-shadow: 0 4px 12px rgba(2, 136, 209, 0.35);
+  background-color: purple !important;
 }
 
 .edit-button:hover {
   transform: translateY(-3px);
-  box-shadow: 0 6px 16px rgba(79, 172, 254, 0.5);
+  box-shadow: 0 6px 16px rgba(2, 136, 209, 0.5);
 }
 
 .edit-button:hover svg {
@@ -571,15 +602,22 @@
 
 /* Mobil görünümü - 768px ve altı */
 @media (max-width: 768px) {
+  .orders-container {
+    padding: 0;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
   .orders-header {
     flex-direction: column;
     gap: 16px;
     align-items: flex-start;
     padding: 16px 20px;
+    margin-bottom: 20px;
   }
 
   .orders-header h1 {
-    font-size: 24px;
+    font-size: 22px;
   }
 
   .create-button {
@@ -589,32 +627,49 @@
     font-size: 16px;
   }
 
+  .status-summary {
+    padding: 0 20px;
+    margin-bottom: 20px;
+  }
+
   .summary-cards {
-    grid-template-columns: 1fr;
-    margin: 0 20px 20px;
-    gap: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
 
   .summary-card {
-    padding: 16px;
+    width: 100%;
+    padding: 24px;
+    box-sizing: border-box;
   }
 
-  .summary-label {
-    font-size: 12px;
+  .summary-count {
+    font-size: 28px;
   }
 
+  .summary-quantity,
   .summary-value {
-    font-size: 20px;
+    font-size: 15px;
   }
 
   .filters {
     flex-direction: column;
     padding: 0 20px;
     gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .filter-group {
     width: 100%;
+    box-sizing: border-box;
+  }
+
+  .filter-group input,
+  .filter-group select {
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .filter-group label {
@@ -625,36 +680,46 @@
     overflow-x: auto;
     margin: 0 20px 20px;
     border-radius: 8px;
+    max-width: calc(100vw - 40px);
+    width: calc(100vw - 40px);
+    box-sizing: border-box;
   }
 
   .orders-table {
-    min-width: 800px;
+    min-width: 100%;
+    table-layout: fixed;
   }
 
   .orders-table th,
   .orders-table td {
-    padding: 12px 8px;
-    font-size: 12px;
+    padding: 10px 6px;
+    font-size: 11px;
   }
 
   .orders-table th {
-    font-size: 11px;
-    padding: 12px 6px;
+    font-size: 10px;
+    padding: 10px 4px;
   }
 
   .action-buttons {
+    display: flex;
     flex-direction: row;
-    gap: 4px;
+    gap: 3px;
+    justify-content: center;
+    flex-wrap: nowrap;
+    min-width: 110px;
   }
 
   .action-buttons button {
-    padding: 6px 8px;
-    font-size: 11px;
+    padding: 5px 6px;
+    font-size: 10px;
+    min-width: 26px;
+    min-height: 26px;
   }
 
   .action-buttons svg {
-    width: 12px;
-    height: 12px;
+    width: 11px;
+    height: 11px;
   }
 
   .status-badge {
@@ -690,6 +755,8 @@
 
   .orders-table-container {
     margin: 0 16px 16px;
+    max-width: calc(100vw - 32px);
+    width: calc(100vw - 32px);
   }
 
   .summary-cards {
@@ -697,23 +764,29 @@
   }
 
   .orders-table {
-    font-size: 11px;
-    min-width: 600px;
+    font-size: 10px;
+    min-width: 100%;
+    table-layout: fixed;
   }
 
   .orders-table th,
   .orders-table td {
-    padding: 8px 4px;
-    font-size: 11px;
+    padding: 8px 3px;
+    font-size: 10px;
   }
 
   .action-buttons {
+    display: flex;
     gap: 2px;
+    justify-content: center;
+    flex-wrap: nowrap;
+    min-width: 100px;
   }
 
   .action-buttons button {
-    padding: 4px 6px;
-    min-width: 28px;
+    padding: 4px 5px;
+    min-width: 24px;
+    min-height: 24px;
   }
 }
 
@@ -1130,12 +1203,25 @@
   position: absolute;
   top: 10px;
   right: 10px;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.selected-indicator.add {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.selected-indicator.remove {
   background: #4caf50;
   color: white;
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  font-weight: 500;
+}
+
+.technic-card:hover .selected-indicator.remove {
+  background: #f44336;
 }
 
 /* Resim Yükleme Stilleri */
@@ -1437,6 +1523,12 @@
 
   .orders-table-container {
     margin: 0 24px 24px;
+    overflow-x: auto;
+  }
+
+  .orders-table {
+    width: 100%;
+    min-width: 100%;
   }
 
   .summary-section {
@@ -1454,7 +1546,7 @@
 
   .orders-table th,
   .orders-table td {
-    padding: 8px 6px;
+    padding: 8px 10px;
     font-size: 13px;
   }
 
@@ -1463,8 +1555,10 @@
   }
 
   .action-buttons button {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
   }
 
   .action-buttons svg {

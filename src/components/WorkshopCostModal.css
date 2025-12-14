@@ -1,0 +1,513 @@
+/* Workshop Cost Modal - Modern Design */
+.workshop-cost-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.workshop-cost-modal-content {
+  background: white;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25);
+  animation: modalSlideUp 0.3s ease-out;
+}
+
+@keyframes modalSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Header */
+.workshop-cost-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 24px 28px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-radius: 20px 20px 0 0;
+}
+
+.workshop-cost-modal-header h2 {
+  margin: 0;
+  font-size: 22px;
+  color: #1e293b;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.workshop-cost-modal-header .workshop-name {
+  margin: 6px 0 0 0;
+  font-size: 15px;
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.workshop-cost-modal-header .close-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: none;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.workshop-cost-modal-header .close-button:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #334155;
+  transform: rotate(90deg);
+}
+
+.workshop-cost-modal-header .close-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Body */
+.workshop-cost-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+}
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  color: #64748b;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 80px 40px;
+  color: #64748b;
+}
+
+.empty-state p {
+  margin: 0 0 12px 0;
+  font-size: 17px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.empty-state small {
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+/* Instruction Text */
+.instruction-text {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-left: 4px solid #3b82f6;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  border-radius: 0 12px 12px 0;
+}
+
+.instruction-text p {
+  margin: 0;
+  color: #1e40af;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Cost Items List */
+.cost-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cost-item-row {
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  transition: all 0.25s ease;
+  background: white;
+}
+
+.cost-item-row:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.cost-item-row.selected {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
+}
+
+.cost-item-header {
+  margin-bottom: 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin-top: 4px;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  flex-shrink: 0;
+  accent-color: #3b82f6;
+}
+
+.cost-item-info {
+  flex: 1;
+}
+
+.cost-item-info strong {
+  font-size: 16px;
+  color: #1e293b;
+  display: block;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.preferred-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #fef9c3 0%, #fde047 100%);
+  color: #a16207;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cost-item-details {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
+.category-badge {
+  display: inline-block;
+  padding: 5px 12px;
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1d4ed8;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.price-info {
+  color: #059669;
+  font-weight: 600;
+  padding: 5px 12px;
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.priority-badge {
+  padding: 5px 12px;
+  background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%);
+  color: #c2410c;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Cost Item Inputs */
+.cost-item-inputs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 2px dashed #e2e8f0;
+}
+
+.cost-item-inputs .full-width {
+  grid-column: 1 / -1;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.input-group label {
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.input-group input {
+  padding: 12px 16px;
+  padding-right: 55px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 15px;
+  transition: all 0.2s ease;
+  background: #f8fafc;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: white;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+}
+
+.input-unit,
+.input-currency {
+  position: absolute;
+  right: 14px;
+  top: 42px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.calculated-total {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border-radius: 10px;
+  font-weight: 700;
+  color: #059669;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  border: 2px solid #a7f3d0;
+}
+
+/* Total Summary */
+.total-summary {
+  margin-top: 28px;
+  padding: 24px;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  border-radius: 16px;
+  color: white;
+  box-shadow: 0 10px 30px rgba(79, 70, 229, 0.3);
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  font-size: 15px;
+}
+
+.summary-row.total {
+  border-top: 2px solid rgba(255, 255, 255, 0.2);
+  margin-top: 12px;
+  padding-top: 16px;
+  font-size: 18px;
+}
+
+.total-amount {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+/* Footer */
+.workshop-cost-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 20px 28px;
+  border-top: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-radius: 0 0 20px 20px;
+}
+
+.cancel-button,
+.save-button {
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.cancel-button {
+  background: white;
+  color: #64748b;
+  border: 2px solid #e2e8f0;
+}
+
+.cancel-button:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.save-button {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+}
+
+.save-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+}
+
+.save-button:disabled,
+.cancel-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .workshop-cost-modal-content {
+    max-width: 95%;
+  }
+
+  .cost-item-inputs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .workshop-cost-modal-overlay {
+    padding: 12px;
+  }
+
+  .workshop-cost-modal-content {
+    max-width: 100%;
+    max-height: 95vh;
+    border-radius: 16px;
+  }
+
+  .workshop-cost-modal-header {
+    padding: 20px;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .workshop-cost-modal-header h2 {
+    font-size: 18px;
+  }
+
+  .workshop-cost-modal-body {
+    padding: 20px;
+  }
+
+  .cost-item-inputs {
+    grid-template-columns: 1fr;
+  }
+
+  .cost-item-inputs .input-group:nth-child(3) {
+    grid-column: 1;
+  }
+
+  .total-amount {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .workshop-cost-modal-overlay {
+    padding: 8px;
+  }
+
+  .workshop-cost-modal-header {
+    padding: 16px;
+  }
+
+  .workshop-cost-modal-header h2 {
+    font-size: 17px;
+  }
+
+  .workshop-cost-modal-header .workshop-name {
+    font-size: 14px;
+  }
+
+  .workshop-cost-modal-body {
+    padding: 16px;
+  }
+
+  .cost-item-row {
+    padding: 14px;
+  }
+
+  .cost-item-info strong {
+    font-size: 15px;
+  }
+
+  .input-group label {
+    font-size: 12px;
+  }
+
+  .input-group input {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .workshop-cost-modal-footer {
+    padding: 16px;
+  }
+
+  .cancel-button,
+  .save-button {
+    padding: 12px 20px;
+    font-size: 14px;
+  }
+}

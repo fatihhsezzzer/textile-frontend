@@ -1,0 +1,682 @@
+import React, { useState, useEffect } from "react";
+import { CostItem, OrderWorkshopCost, Operator, CostUnit } from "../types";
+import { costService } from "../services/dataService";
+import { formatNumber } from "../utils/formatters";
+import "./WorkshopTransferModal.css";
+
+interface WorkshopTransferModalProps {
+  isOpen: boolean;
+  orderId: string;
+  oldWorkshopId: string | null;
+  oldWorkshopName: string;
+  newWorkshopId: string | null;
+  newWorkshopName: string;
+  operators: Operator[];
+  selectedOperatorId: string;
+  onOperatorChange: (operatorId: string) => void;
+  onClose: () => void;
+  onSave: (
+    operatorId: string,
+    costs: Omit<
+      OrderWorkshopCost,
+      | "orderWorkshopCostId"
+      | "createdAt"
+      | "createdBy"
+      | "updatedAt"
+      | "updatedBy"
+      | "order"
+      | "workshop"
+      | "costItem"
+    >[]
+  ) => Promise<void>;
+}
+
+interface CostItemInput {
+  costItemId: string;
+  costItem?: CostItem;
+  quantityUsed: number;
+  quantity2?: number;
+  quantity3?: number;
+  unit2?: string;
+  unit3?: string;
+  costUnitId3?: string;
+  actualPrice: number;
+  currency: string;
+  notes: string;
+}
+
+const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
+  isOpen,
+  orderId,
+  oldWorkshopId,
+  oldWorkshopName,
+  newWorkshopId,
+  newWorkshopName,
+  operators,
+  selectedOperatorId,
+  onOperatorChange,
+  onClose,
+  onSave,
+}) => {
+  const [workshopCostItems, setWorkshopCostItems] = useState<
+    WorkshopCostItem[]
+  >([]);
+  const [selectedCosts, setSelectedCosts] = useState<
+    Map<string, CostItemInput>
+  >(new Map());
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [currentStep, setCurrentStep] = useState<"operator" | "costs">(
+    "operator"
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      // Modal açıldığında step'i sıfırla
+      setCurrentStep("operator");
+      setSelectedCosts(new Map());
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && oldWorkshopId && currentStep === "costs") {
+      loadWorkshopCostItems();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, oldWorkshopId, currentStep]);
+
+  const loadWorkshopCostItems = async () => {
+    if (
+      !oldWorkshopId ||
+      oldWorkshopId === "null" ||
+      oldWorkshopId === "undefined"
+    ) {
+      setWorkshopCostItems([]);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const items = await costService.getWorkshopCostItems(oldWorkshopId);
+      const filteredItems = items
+        .filter((item) => {
+          // isActive undefined ise true kabul et (API'den gelmiyor)
+          return (
+            (item.isActive === undefined || item.isActive) && item.costItem
+          );
+        })
+        .sort((a, b) => (a.priority || 999) - (b.priority || 999));
+      setWorkshopCostItems(filteredItems);
+    } catch (error) {
+      console.error("❌ Failed to load workshop cost items:", error);
+      setWorkshopCostItems([]);
+      // Sessizce devam et, kullanıcıyı rahatsız etme
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOperatorNext = () => {
+    if (!selectedOperatorId) {
+      alert("Lütfen bir operatör seçin!");
+      return;
+    }
+
+    // Eğer eski atölye yoksa (atanmamıştan geliyorsa), direkt kaydet
+    if (!oldWorkshopId) {
+      handleFinalSave();
+    } else {
+      // Maliyetler adımına geç
+      setCurrentStep("costs");
+    }
+  };
+
+  const toggleCostItem = (item: WorkshopCostItem, checked: boolean) => {
+    const newSelected = new Map(selectedCosts);
+
+    if (checked) {
+      // Eğer maliyet kalemi ikinci boyuta sahipse, quantity2'yi başlat
+      const hasSecondDimension =
+        item.costItem?.costUnit2 || item.costItem?.unit2;
+      const unit2Name =
+        item.costItem?.costUnit2?.unitName || item.costItem?.unit2;
+
+      // Üçüncü boyut kontrolü
+      const hasThirdDimension = item.costItem?.costUnit3;
+      const unit3Name = item.costItem?.costUnit3?.unitName;
+
+      console.log("🔍 Cost Item Debug:", {
+        itemName: item.costItem?.itemName,
+        costItemId: item.costItem?.costItemId,
+        unit: item.costItem?.unitName || item.costItem?.unit,
+        unit2: unit2Name,
+        unit3: unit3Name,
+        hasSecondDimension,
+        hasThirdDimension,
+        costUnit2: item.costItem?.costUnit2,
+        costUnit3: item.costItem?.costUnit3,
+        costUnitId2: item.costItem?.costUnitId2,
+        costUnitId3: item.costItem?.costUnitId3,
+        fullCostItem: item.costItem,
+      });
+
+      newSelected.set(item.costItemId, {
+        costItemId: item.costItemId,
+        costItem: item.costItem,
+        quantityUsed: 1,
+        quantity2: hasSecondDimension ? 1 : undefined,
+        quantity3: hasThirdDimension ? 0 : undefined,
+        unit2: hasSecondDimension ? unit2Name : undefined,
+        unit3: hasThirdDimension ? unit3Name : undefined,
+        costUnitId3: hasThirdDimension ? item.costItem?.costUnitId3 : undefined,
+        actualPrice: item.effectivePrice,
+        currency: item.costItem?.currency || "TRY",
+        notes: "",
+      });
+
+      // Miktar inputuna otomatik focus
+      setTimeout(() => {
+        const input = document.querySelector(
+          `input[data-cost-item-id="${item.costItemId}"]`
+        ) as HTMLInputElement;
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      }, 100);
+    } else {
+      newSelected.delete(item.costItemId);
+    }
+
+    setSelectedCosts(newSelected);
+  };
+
+  const updateCostItemInput = (
+    costItemId: string,
+    field: keyof CostItemInput,
+    value: any
+  ) => {
+    const newSelected = new Map(selectedCosts);
+    const item = newSelected.get(costItemId);
+    if (item) {
+      newSelected.set(costItemId, { ...item, [field]: value });
+      setSelectedCosts(newSelected);
+    }
+  };
+
+  const handleFinalSave = async () => {
+    if (!selectedOperatorId) {
+      alert("Lütfen bir operatör seçin!");
+      return;
+    }
+
+    // Eski atölye varsa maliyet girişi zorunlu
+    if (oldWorkshopId && selectedCosts.size === 0) {
+      alert("Lütfen en az bir maliyet kalemi seçin ve bilgilerini girin!");
+      return;
+    }
+
+    // Validation
+    if (selectedCosts.size > 0) {
+      for (const [, input] of Array.from(selectedCosts.entries())) {
+        if (input.quantityUsed <= 0) {
+          alert("Miktar sıfırdan büyük olmalıdır!");
+          return;
+        }
+
+        // Eğer maliyet kaleminin 3. birimi varsa, quantity3 zorunlu
+        if (input.unit3 && (!input.quantity3 || input.quantity3 <= 0)) {
+          alert(
+            `"${input.costItem?.itemName || "Maliyet kalemi"}" için ek birim (${
+              input.unit3
+            }) miktarı girmeniz gerekiyor!`
+          );
+          return;
+        }
+      }
+    }
+
+    // Onay mesajı
+    const operatorName = operators.find(
+      (op) => op.operatorId === selectedOperatorId
+    );
+    const operatorFullName = operatorName
+      ? `${operatorName.firstName} ${operatorName.lastName}`
+      : "Seçili operatör";
+    const costCount = selectedCosts.size;
+    const confirmMessage = oldWorkshopId
+      ? `${oldWorkshopName} atölyesinden ${newWorkshopName} atölyesine transfer edilecek.\n\nOperatör: ${operatorFullName}\nMaliyet Kalemi: ${costCount} adet\n\nOnaylıyor musunuz?`
+      : `${newWorkshopName} atölyesine atama yapılacak.\n\nOperatör: ${operatorFullName}\n\nOnaylıyor musunuz?`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const costsToSave = Array.from(selectedCosts.values()).map((input) => ({
+        orderId,
+        workshopId: oldWorkshopId || "",
+        costItemId: input.costItemId,
+        quantityUsed: input.quantityUsed,
+        quantity2: input.quantity2, // İkinci boyut (opsiyonel)
+        quantity3: input.quantity3, // Üçüncü boyut (opsiyonel, referans)
+        unit2: input.unit2, // İkinci birim
+        unit3: input.unit3, // Üçüncü birim (opsiyonel, referans)
+        costUnitId3: input.costUnitId3, // Üçüncü birim ID (opsiyonel, referans)
+        actualPrice: input.actualPrice,
+        currency: input.currency,
+        totalCost:
+          input.quantityUsed * (input.quantity2 || 1) * input.actualPrice,
+        notes: input.notes.trim() || undefined,
+        isActive: true,
+        unit: input.costItem?.unitName || input.costItem?.unit || "Birim", // Required unit field
+      }));
+
+      await onSave(selectedOperatorId, costsToSave);
+
+      // Başarılı, state'i temizle
+      setSelectedCosts(new Map());
+      setCurrentStep("operator");
+    } catch (error: any) {
+      console.error("❌ Failed to save:", error);
+      alert(error.message || "İşlem başarısız oldu!");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleBack = () => {
+    setCurrentStep("operator");
+  };
+
+  const calculateTotalCost = (): number => {
+    return Array.from(selectedCosts.values()).reduce(
+      (sum, item) => sum + item.quantityUsed * item.actualPrice,
+      0
+    );
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="workshop-transfer-modal-overlay">
+      <div
+        className="workshop-transfer-modal-content"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="workshop-transfer-modal-header">
+          <div>
+            <h2>
+              {currentStep === "operator"
+                ? "🏭 Atölye Transferi"
+                : "💰 Atölye Maliyetleri"}
+            </h2>
+            <p className="workshop-transfer-info">
+              {oldWorkshopName} → {newWorkshopName}
+            </p>
+          </div>
+          <button className="close-button" onClick={onClose} disabled={saving}>
+            ×
+          </button>
+        </div>
+
+        <div className="workshop-transfer-modal-body">
+          {/* Step Indicator */}
+          <div className="step-indicator">
+            <div
+              className={`step ${
+                currentStep === "operator" ? "active" : "completed"
+              }`}
+            >
+              <div className="step-number">1</div>
+              <span>Operatör Seçimi</span>
+            </div>
+            {oldWorkshopId && (
+              <>
+                <div className="step-line"></div>
+                <div
+                  className={`step ${currentStep === "costs" ? "active" : ""}`}
+                >
+                  <div className="step-number">2</div>
+                  <span>Maliyet Girişi</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Step 1: Operator Selection */}
+          {currentStep === "operator" && (
+            <div className="operator-selection">
+              <h3>
+                Operatör Seçin: <span style={{ color: "#d32f2f" }}>*</span>
+              </h3>
+              <div className="operators-grid">
+                {operators.map((operator) => (
+                  <div
+                    key={operator.operatorId}
+                    className={`operator-card ${
+                      selectedOperatorId === operator.operatorId
+                        ? "selected"
+                        : ""
+                    }`}
+                    onClick={() => onOperatorChange(operator.operatorId)}
+                  >
+                    <div className="operator-avatar">
+                      {operator.firstName.charAt(0)}
+                      {operator.lastName.charAt(0)}
+                    </div>
+                    <div className="operator-info">
+                      <strong>
+                        {operator.firstName} {operator.lastName}
+                      </strong>
+                      {operator.specialization && (
+                        <span className="specialization">
+                          {operator.specialization}
+                        </span>
+                      )}
+                    </div>
+                    {selectedOperatorId === operator.operatorId && (
+                      <div className="check-icon">✓</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Cost Entry */}
+          {currentStep === "costs" && (
+            <div className="cost-entry">
+              {loading ? (
+                <div className="loading-state">
+                  <div className="loading-spinner"></div>
+                  <p>Maliyet kalemleri yükleniyor...</p>
+                </div>
+              ) : workshopCostItems.length === 0 ? (
+                <div className="empty-state">
+                  <p>Bu atölye için kayıtlı maliyet kalemi bulunmuyor.</p>
+                  <small>Maliyet girmeden devam edebilirsiniz.</small>
+                </div>
+              ) : (
+                <>
+                  <div className="instruction-text">
+                    <p>
+                      <strong>{oldWorkshopName}</strong> atölyesinde kullanılan
+                      maliyet kalemlerini seçin:
+                    </p>
+                  </div>
+
+                  <div className="cost-items-list">
+                    {workshopCostItems.map((item) => {
+                      const isSelected = selectedCosts.has(item.costItemId);
+                      const input = selectedCosts.get(item.costItemId);
+
+                      return (
+                        <div
+                          key={item.workshopCostItemId}
+                          className={`cost-item-row ${
+                            isSelected ? "selected" : ""
+                          }`}
+                        >
+                          <div className="cost-item-header">
+                            <label className="checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) =>
+                                  toggleCostItem(item, e.target.checked)
+                                }
+                              />
+                              <div className="cost-item-info">
+                                <strong>{item.costItem?.itemName}</strong>
+                                {item.isPreferred && (
+                                  <span className="preferred-badge">
+                                    ⭐ Tercih Edilen
+                                  </span>
+                                )}
+                                <div className="cost-item-details">
+                                  <span className="category-badge">
+                                    {item.costItem?.costCategory?.categoryName}
+                                  </span>
+                                </div>
+                              </div>
+                            </label>
+                          </div>
+
+                          {isSelected && input && (
+                            <div className="cost-item-inputs">
+                              <div
+                                className="input-group"
+                                style={{ flex: "2" }}
+                              >
+                                <label>
+                                  Miktar (
+                                  {item.costItem?.unitName ||
+                                    item.costItem?.costUnit?.unitName ||
+                                    item.costItem?.unit ||
+                                    "birim"}
+                                  )
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0.01"
+                                  value={input.quantityUsed}
+                                  data-cost-item-id={item.costItemId}
+                                  onChange={(e) =>
+                                    updateCostItemInput(
+                                      item.costItemId,
+                                      "quantityUsed",
+                                      parseFloat(e.target.value) || 0
+                                    )
+                                  }
+                                  required
+                                  placeholder={`Kaç ${(
+                                    item.costItem?.unitName ||
+                                    item.costItem?.costUnit?.unitName ||
+                                    item.costItem?.unit ||
+                                    "adet"
+                                  ).toLowerCase()}?`}
+                                />
+                                <span
+                                  className="input-unit"
+                                  style={{
+                                    fontSize: "14px",
+                                    fontWeight: "600",
+                                    color: "#667eea",
+                                  }}
+                                >
+                                  {item.costItem?.unitName ||
+                                    item.costItem?.costUnit?.unitCode ||
+                                    item.costItem?.unit}
+                                </span>
+                              </div>
+
+                              {/* İkinci Boyut Input (eğer tanımlıysa) */}
+                              {input.unit2 && (
+                                <div
+                                  className="input-group"
+                                  style={{
+                                    flex: "1",
+                                    position: "relative",
+                                  }}
+                                >
+                                  <label>{input.unit2} (İkinci Boyut)</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    value={input.quantity2 || 1}
+                                    onChange={(e) =>
+                                      updateCostItemInput(
+                                        item.costItemId,
+                                        "quantity2",
+                                        parseFloat(e.target.value) || 1
+                                      )
+                                    }
+                                    required
+                                    placeholder={`Kaç ${input.unit2.toLowerCase()}?`}
+                                  />
+                                  <span
+                                    className="input-unit"
+                                    style={{
+                                      fontSize: "14px",
+                                      fontWeight: "600",
+                                      color: "#667eea",
+                                    }}
+                                  >
+                                    {input.unit2}
+                                  </span>
+                                  <div
+                                    style={{
+                                      marginTop: "4px",
+                                      fontSize: "12px",
+                                      color: "#666",
+                                    }}
+                                  >
+                                    Toplam: {input.quantityUsed} ×{" "}
+                                    {input.quantity2 || 1} ={" "}
+                                    {formatNumber(
+                                      input.quantityUsed *
+                                        (input.quantity2 || 1)
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Ek Birim - Sadece Bilgi (Hesaplamaya Dahil Değil) */}
+                              {input.unit3 && (
+                                <div
+                                  className="input-group"
+                                  style={{
+                                    flex: "1",
+                                    position: "relative",
+                                    background: "#fffbf0",
+                                    padding: "12px",
+                                    borderRadius: "8px",
+                                    border: "1px solid #ffd97d",
+                                  }}
+                                >
+                                  <label style={{ color: "#856404" }}>
+                                    {input.unit3} *
+                                    <span
+                                      style={{
+                                        fontSize: "11px",
+                                        color: "#856404",
+                                        marginLeft: "4px",
+                                        opacity: 0.8,
+                                      }}
+                                    >
+                                      (Sadece bilgi - hesaplamaya dahil değil)
+                                    </span>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    value={input.quantity3 || ""}
+                                    onChange={(e) =>
+                                      updateCostItemInput(
+                                        item.costItemId,
+                                        "quantity3",
+                                        parseFloat(e.target.value) || 0
+                                      )
+                                    }
+                                    placeholder={`Kaç ${input.unit3.toLowerCase()}? (Zorunlu)`}
+                                    required
+                                    style={{
+                                      border: "1px solid #ffd97d",
+                                      background: "#fff",
+                                    }}
+                                  />
+                                  <span
+                                    className="input-unit"
+                                    style={{
+                                      fontSize: "14px",
+                                      fontWeight: "600",
+                                      color: "#856404",
+                                    }}
+                                  >
+                                    {input.unit3}
+                                  </span>
+                                </div>
+                              )}
+
+                              <div className="input-group full-width">
+                                <label>Not (Opsiyonel)</label>
+                                <input
+                                  type="text"
+                                  value={input.notes}
+                                  onChange={(e) =>
+                                    updateCostItemInput(
+                                      item.costItemId,
+                                      "notes",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="Ek bilgi veya açıklama"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="workshop-transfer-modal-footer">
+          {currentStep === "operator" ? (
+            <>
+              <button
+                type="button"
+                className="cancel-button"
+                onClick={onClose}
+                disabled={saving}
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                className="next-button"
+                onClick={handleOperatorNext}
+                disabled={!selectedOperatorId || saving}
+              >
+                {oldWorkshopId ? "İleri →" : "Kaydet"}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="back-button"
+                onClick={handleBack}
+                disabled={saving}
+              >
+                ← Geri
+              </button>
+              <button
+                type="button"
+                className="save-button"
+                onClick={handleFinalSave}
+                disabled={saving || selectedCosts.size === 0}
+              >
+                {saving
+                  ? "Kaydediliyor..."
+                  : `${selectedCosts.size} Kalemi Kaydet`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default WorkshopTransferModal;

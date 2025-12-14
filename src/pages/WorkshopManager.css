@@ -1,0 +1,465 @@
+.workshop-manager {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 0;
+}
+
+/* Header */
+.wm-header {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.wm-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.wm-header h1 {
+  font-size: 24px;
+  margin: 0;
+  color: #2c3e50;
+}
+
+.btn-kanban-view {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 20px;
+  transition: all 0.3s;
+}
+
+.btn-kanban-view:hover {
+  background: #2980b9;
+  transform: scale(1.05);
+}
+
+/* Filtreler */
+.wm-filters {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.3s;
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: #3498db;
+}
+
+.workshop-filter select {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 16px;
+  background: white;
+  cursor: pointer;
+}
+
+/* İstatistikler */
+.wm-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.stat-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 16px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.stat-value {
+  display: block;
+  font-size: 28px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  display: block;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+/* Content */
+.wm-content {
+  padding: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Workshop Group */
+.workshop-group {
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.workshop-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.3s;
+}
+
+.workshop-group-header:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+.workshop-group-header.unassigned {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.workshop-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.workshop-icon {
+  font-size: 24px;
+}
+
+.workshop-name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.order-count {
+  background: rgba(255, 255, 255, 0.3);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.expand-icon {
+  font-size: 16px;
+  transition: transform 0.3s;
+}
+
+/* Orders List */
+.orders-list {
+  padding: 12px;
+  background: #f8f9fa;
+}
+
+/* Order Card */
+.order-card {
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s;
+}
+
+.order-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.order-card:last-child {
+  margin-bottom: 0;
+}
+
+.order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.order-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.order-code {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.order-status {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  color: white;
+  font-weight: 500;
+}
+
+.btn-details {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.3s;
+}
+
+.btn-details:hover {
+  background: #2980b9;
+  transform: scale(1.1);
+}
+
+.order-card-body {
+  padding: 16px;
+}
+
+.order-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.order-info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-size: 14px;
+  color: #7f8c8d;
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: 14px;
+  color: #2c3e50;
+  font-weight: 600;
+  text-align: right;
+}
+
+.order-card-footer {
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  gap: 8px;
+}
+
+.workshop-select {
+  flex: 1;
+  padding: 10px 12px;
+  border: 2px solid #3498db;
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+  font-weight: 500;
+  color: #2c3e50;
+  transition: all 0.3s;
+}
+
+.workshop-select:hover {
+  border-color: #2980b9;
+  background: #f8f9fa;
+}
+
+.btn-transfer {
+  flex: 1;
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.btn-transfer:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(17, 153, 142, 0.3);
+}
+
+.workshop-select-mini {
+  flex: 1;
+  padding: 10px 12px;
+  border: 2px solid #f39c12;
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+  font-weight: 500;
+  color: #2c3e50;
+  transition: all 0.3s;
+}
+
+.workshop-select-mini:hover {
+  border-color: #e67e22;
+  background: #fff5e6;
+}
+
+/* Loading */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Responsive - Tablet */
+@media (max-width: 768px) {
+  .wm-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .wm-header h1 {
+    font-size: 20px;
+  }
+
+  .order-card-footer {
+    flex-direction: column;
+  }
+}
+
+/* Responsive - Mobile */
+@media (max-width: 480px) {
+  .wm-header {
+    padding: 12px;
+  }
+
+  .wm-header h1 {
+    font-size: 18px;
+  }
+
+  .wm-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .stat-card {
+    padding: 12px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+  }
+
+  .wm-content {
+    padding: 12px;
+  }
+
+  .workshop-name {
+    font-size: 16px;
+  }
+
+  .order-count {
+    font-size: 12px;
+    padding: 2px 8px;
+  }
+
+  .order-card-header {
+    padding: 10px 12px;
+  }
+
+  .order-code {
+    font-size: 14px;
+  }
+
+  .order-status {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .order-info-row {
+    padding: 6px 0;
+  }
+
+  .info-label,
+  .info-value {
+    font-size: 13px;
+  }
+}
+
+/* Touch Optimization */
+@media (hover: none) and (pointer: coarse) {
+  .order-card {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .workshop-group-header,
+  .btn-details,
+  .btn-transfer,
+  .workshop-select,
+  .workshop-select-mini {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .order-card:active {
+    transform: scale(0.98);
+  }
+
+  .btn-details:active,
+  .btn-transfer:active {
+    transform: scale(0.95);
+  }
+}
+
+/* Dark mode ready (optional) */
+@media (prefers-color-scheme: dark) {
+  /* Buraya dark mode stilleri eklenebilir */
+}

@@ -7,7 +7,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000, // 10 second timeout
+  timeout: 30000, // 30 second timeout (QR kod oluşturma için artırıldı)
   headers: {
     "Content-Type": "application/json",
   },
@@ -155,3 +155,88 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// Helper function for making API requests
+export const apiRequest = async (url: string, options: RequestInit = {}) => {
+  const token = localStorage.getItem("token");
+
+  const defaultHeaders: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+
+  if (token) {
+    defaultHeaders.Authorization = `Bearer ${token}`;
+  }
+
+  const config = {
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...options.headers,
+    },
+  };
+
+  const fullUrl = url.startsWith("http") ? url : `${API_BASE_URL}${url}`;
+
+  try {
+    const response = await fetch(fullUrl, config);
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+        throw new Error("Unauthorized");
+      }
+
+      // Try to get error message from response body
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        console.error("Backend Error Response:", errorData); // Debug log
+
+        if (errorData) {
+          // Handle ASP.NET validation errors
+          if (errorData.errors) {
+            const validationErrors = Object.entries(errorData.errors)
+              .map(
+                ([field, messages]: [string, any]) =>
+                  `${field}: ${
+                    Array.isArray(messages) ? messages.join(", ") : messages
+                  }`
+              )
+              .join("\n");
+            errorMessage = `Validation errors:\n${validationErrors}`;
+          } else if (errorData.message || errorData.title || errorData.error) {
+            errorMessage =
+              errorData.message ||
+              errorData.title ||
+              errorData.error ||
+              errorMessage;
+          }
+        }
+      } catch (e) {
+        // If response is not JSON, use text
+        try {
+          const errorText = await response.text();
+          if (errorText) errorMessage = errorText;
+        } catch (e2) {
+          // Use default message
+        }
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    // Check if response has content
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      return response.json();
+    }
+
+    return response.text();
+  } catch (error) {
+    console.error("API Request failed:", error);
+    throw error;
+  }
+};

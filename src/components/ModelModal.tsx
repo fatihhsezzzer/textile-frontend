@@ -22,12 +22,6 @@ const ModelModal: React.FC<ModelModalProps> = ({
     modelName: "",
     description: "",
     category: "",
-    season: "",
-    color: "",
-    size: "",
-    fabric: "",
-    estimatedPrice: "",
-    estimatedProductionTime: "",
   });
 
   useEffect(() => {
@@ -56,16 +50,6 @@ const ModelModal: React.FC<ModelModalProps> = ({
         modelName: newModel.modelName || newModel.modelCode,
         description: newModel.description || undefined,
         category: newModel.category || undefined,
-        season: newModel.season || undefined,
-        color: newModel.color || undefined,
-        size: newModel.size || undefined,
-        fabric: newModel.fabric || undefined,
-        estimatedPrice: newModel.estimatedPrice
-          ? parseFloat(newModel.estimatedPrice)
-          : undefined,
-        estimatedProductionTime: newModel.estimatedProductionTime
-          ? parseInt(newModel.estimatedProductionTime)
-          : undefined,
       };
 
       const created = await modelService.create(modelData);
@@ -76,12 +60,6 @@ const ModelModal: React.FC<ModelModalProps> = ({
         modelName: "",
         description: "",
         category: "",
-        season: "",
-        color: "",
-        size: "",
-        fabric: "",
-        estimatedPrice: "",
-        estimatedProductionTime: "",
       });
       onSelect(created);
       onClose();
@@ -131,9 +109,6 @@ const ModelModal: React.FC<ModelModalProps> = ({
                         Kategori: {model.category}
                       </div>
                     )}
-                    {model.season && (
-                      <div className="item-detail">Sezon: {model.season}</div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -165,50 +140,6 @@ const ModelModal: React.FC<ModelModalProps> = ({
                     }
                   />
                 </div>
-                <div className="form-group">
-                  <label>Sezon</label>
-                  <input
-                    type="text"
-                    value={newModel.season}
-                    onChange={(e) =>
-                      setNewModel({ ...newModel, season: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Renk</label>
-                  <input
-                    type="text"
-                    value={newModel.color}
-                    onChange={(e) =>
-                      setNewModel({ ...newModel, color: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Beden</label>
-                  <input
-                    type="text"
-                    value={newModel.size}
-                    onChange={(e) =>
-                      setNewModel({ ...newModel, size: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>Kumaş</label>
-                <input
-                  type="text"
-                  value={newModel.fabric}
-                  onChange={(e) =>
-                    setNewModel({ ...newModel, fabric: e.target.value })
-                  }
-                />
               </div>
 
               <div className="form-group">
@@ -220,36 +151,6 @@ const ModelModal: React.FC<ModelModalProps> = ({
                   }
                   rows={3}
                 />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Tahmini Fiyat</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={newModel.estimatedPrice}
-                    onChange={(e) =>
-                      setNewModel({
-                        ...newModel,
-                        estimatedPrice: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Tahmini Üretim Süresi (gün)</label>
-                  <input
-                    type="number"
-                    value={newModel.estimatedProductionTime}
-                    onChange={(e) =>
-                      setNewModel({
-                        ...newModel,
-                        estimatedProductionTime: e.target.value,
-                      })
-                    }
-                  />
-                </div>
               </div>
 
               <div className="form-actions">

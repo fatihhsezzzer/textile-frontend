@@ -1,0 +1,483 @@
+.user-info-display {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.user-info-label {
+  color: #34495e;
+  font-weight: 500;
+}
+.user-info-value {
+  color: #2980b9;
+  font-weight: 600;
+}
+.modelist-job-tracker-container {
+  max-width: 800px;
+  margin: 40px auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+  padding: 32px 24px;
+}
+.modelist-job-tracker-container h2 {
+  text-align: center;
+  margin-bottom: 24px;
+  color: #2c3e50;
+}
+
+/* Tab Navigation */
+.tracker-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 0;
+}
+
+.tracker-tab {
+  flex: 1;
+  padding: 12px 20px;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  color: #7f8c8d;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.3s ease;
+}
+
+.tracker-tab:hover {
+  color: #2980b9;
+  background: #f8f9fa;
+}
+
+.tracker-tab.active {
+  color: #2980b9;
+  border-bottom-color: #2980b9;
+}
+
+.modelist-job-form {
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.modelist-job-form label {
+  display: block;
+  margin-bottom: 16px;
+  color: #34495e;
+  font-weight: 500;
+}
+.modelist-job-form input[type="text"],
+.modelist-job-form input[type="number"] {
+  width: 100%;
+  padding: 8px;
+  margin-top: 6px;
+  border: 1px solid #dfe6e9;
+  border-radius: 6px;
+  font-size: 15px;
+}
+
+.photo-upload-wrapper {
+  margin-bottom: 18px;
+}
+.photo-upload-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #34495e;
+  font-weight: 500;
+}
+.photo-upload-box {
+  display: block;
+  cursor: pointer;
+}
+.photo-upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed #6dd5fa;
+  background: #f8fbfd;
+  border-radius: 10px;
+  padding: 24px 0 16px 0;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.photo-upload-box:hover .photo-upload-content {
+  border-color: #2980b9;
+  box-shadow: 0 2px 12px rgba(44, 62, 80, 0.08);
+}
+.photo-upload-preview {
+  max-width: 160px;
+  max-height: 160px;
+  border-radius: 8px;
+  box-shadow: 0 1px 8px rgba(44, 62, 80, 0.1);
+  margin-bottom: 8px;
+}
+.photo-upload-text {
+  color: #2980b9;
+  font-size: 15px;
+  margin-top: 8px;
+}
+.modelist-job-form button[type="submit"] {
+  width: 100%;
+  padding: 10px;
+  background: linear-gradient(90deg, #2980b9 0%, #6dd5fa 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 18px;
+  transition: background 0.2s;
+}
+.modelist-job-form button[type="submit"]:hover {
+  background: linear-gradient(90deg, #2471a3 0%, #48c6ef 100%);
+}
+
+/* My Jobs Section */
+.my-jobs-section {
+  margin-top: 16px;
+}
+
+.jobs-loading,
+.no-jobs {
+  text-align: center;
+  padding: 40px 20px;
+  color: #7f8c8d;
+}
+
+.no-jobs p {
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+.add-first-job-btn {
+  padding: 12px 24px;
+  background: linear-gradient(90deg, #2980b9 0%, #6dd5fa 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.add-first-job-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(41, 128, 185, 0.3);
+}
+
+.my-jobs-table-container {
+  overflow-x: auto;
+}
+
+.my-jobs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.my-jobs-table th {
+  background: #f8f9fa;
+  padding: 12px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #2c3e50;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.my-jobs-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.my-jobs-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.my-jobs-table .pattern-code {
+  font-weight: 600;
+  color: #2980b9;
+}
+
+.my-jobs-table .date-cell {
+  color: #7f8c8d;
+  font-size: 13px;
+}
+
+/* Status Select */
+.status-select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  min-width: 130px;
+}
+
+.status-select.status-beklemede {
+  background-color: #fff3cd;
+  border-color: #ffc107;
+  color: #856404;
+}
+
+.status-select.status-devam-ediyor {
+  background-color: #cce5ff;
+  border-color: #007bff;
+  color: #004085;
+}
+
+.status-select.status-tamamlandı {
+  background-color: #d4edda;
+  border-color: #28a745;
+  color: #155724;
+}
+
+.status-select.status-iptal {
+  background-color: #f8d7da;
+  border-color: #dc3545;
+  color: #721c24;
+}
+
+.status-select.status-onay-bekliyor {
+  background-color: #e2e3e5;
+  border-color: #6c757d;
+  color: #383d41;
+}
+
+.updating-indicator {
+  margin-left: 8px;
+  color: #2980b9;
+  font-weight: bold;
+}
+
+.photo-view-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.photo-view-btn:hover {
+  background: #f0f0f0;
+}
+
+.no-photo {
+  color: #ccc;
+}
+
+/* Image Preview Modal */
+.image-preview-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  cursor: pointer;
+}
+
+.image-preview-modal-content {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+}
+
+.image-preview-modal-content img {
+  max-width: 100%;
+  max-height: 85vh;
+  border-radius: 8px;
+}
+
+.image-preview-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: white;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-preview-close:hover {
+  background: #f0f0f0;
+}
+
+/* Edit Job Button */
+.edit-job-btn {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid #3498db;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.edit-job-btn:hover {
+  background: #3498db;
+  color: white;
+}
+
+/* Edit Modal */
+.edit-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.edit-modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 450px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.edit-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.edit-modal-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 18px;
+}
+
+.edit-modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #7f8c8d;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.edit-modal-close:hover {
+  background: #f0f0f0;
+  color: #2c3e50;
+}
+
+.edit-modal-body {
+  padding: 20px;
+}
+
+.edit-form-group {
+  margin-bottom: 16px;
+}
+
+.edit-form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: #34495e;
+  font-size: 14px;
+}
+
+.edit-form-group input,
+.edit-form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.edit-form-group input:focus,
+.edit-form-group select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.edit-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid #eee;
+  background: #f9f9f9;
+  border-radius: 0 0 12px 12px;
+}
+
+.edit-cancel-btn {
+  padding: 10px 20px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.edit-cancel-btn:hover:not(:disabled) {
+  background: #f0f0f0;
+}
+
+.edit-save-btn {
+  padding: 10px 20px;
+  border: none;
+  background: #27ae60;
+  color: white;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.edit-save-btn:hover:not(:disabled) {
+  background: #219a52;
+}
+
+.edit-save-btn:disabled,
+.edit-cancel-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

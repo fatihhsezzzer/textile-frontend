@@ -42,7 +42,7 @@
 }
 
 .back-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--btn-primary);
   color: white;
   border: none;
   padding: 12px 24px;
@@ -51,12 +51,12 @@
   font-size: 16px;
   font-weight: 600;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 15px rgba(25, 118, 210, 0.3);
 }
 
 .back-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 6px 20px rgba(25, 118, 210, 0.4);
 }
 
 .order-detail-header h1 {
@@ -188,6 +188,156 @@
   font-size: 13px;
   color: #7f8c8d;
   text-align: center;
+}
+
+/* Workshop Costs Section */
+.costs-section {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+  margin-bottom: 40px;
+}
+
+.costs-section h2 {
+  margin: 0 0 30px 0;
+  font-size: 28px;
+  background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.loading-costs {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 16px;
+}
+
+.costs-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.costs-table {
+  overflow-x: auto;
+}
+
+.costs-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.costs-table thead {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.costs-table th {
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.costs-table tbody tr {
+  border-bottom: 1px solid #e0e0e0;
+  transition: all 0.2s;
+}
+
+.costs-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.costs-table td {
+  padding: 16px;
+  color: #555;
+  font-size: 14px;
+}
+
+.costs-table .category-badge {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.costs-table .unit-text {
+  color: #999;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.costs-table .total-cell {
+  font-size: 15px;
+  color: #2e7d32;
+}
+
+.costs-table tfoot {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.costs-table tfoot td {
+  padding: 20px 16px;
+  color: white;
+  font-size: 16px;
+}
+
+.costs-table .grand-total {
+  font-size: 20px;
+  color: white;
+}
+
+.costs-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.summary-card {
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  color: white;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+  transition: transform 0.2s;
+}
+
+.summary-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(102, 126, 234, 0.4);
+}
+
+.summary-icon {
+  font-size: 48px;
+  opacity: 0.9;
+}
+
+.summary-content {
+  flex: 1;
+}
+
+.summary-content h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+.summary-value {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
 }
 
 /* Timeline Section */

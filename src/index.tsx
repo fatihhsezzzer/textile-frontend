@@ -1,11 +1,28 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
-import reportWebVitals from './reportWebVitals';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import "./index.css";
+import App from "./App";
+import reportWebVitals from "./reportWebVitals";
+
+// Prevent mouse wheel from changing number input values globally
+document.addEventListener(
+  "wheel",
+  (e) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.tagName === "INPUT" &&
+      (target as HTMLInputElement).type === "number"
+    ) {
+      if (document.activeElement === target) {
+        e.preventDefault();
+      }
+    }
+  },
+  { passive: false }
+);
 
 const root = ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement
+  document.getElementById("root") as HTMLElement
 );
 root.render(
   <React.StrictMode>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import QRCode from "qrcode";
 import {
   Order,
   Model,
@@ -10,12 +11,19 @@ import {
   OrderImage,
   Currency,
   OrderUnit,
+  OrderStatus,
+  ModelPriceHistory,
+  ModelPriceHistoryItem,
+  User,
 } from "../types";
 import {
   orderService,
   firmService,
   workshopService,
   exchangeRateService,
+  costService,
+  modelService,
+  userService,
 } from "../services/dataService";
 import { useAuth } from "../context/AuthContext";
 import ModelModal from "../components/ModelModal";
@@ -23,6 +31,7 @@ import WorkshopModal from "../components/WorkshopModal";
 import OperatorModal from "../components/OperatorModal";
 import TechnicModal from "../components/TechnicModal";
 import FirmModal from "../components/FirmModal";
+import PageLoader from "../components/PageLoader";
 import "./OrderForm.css";
 
 const OrderForm: React.FC = () => {
@@ -51,10 +60,17 @@ const OrderForm: React.FC = () => {
   );
   const [selectedFirm, setSelectedFirm] = useState<Firm | null>(null);
   const [selectedTechnics, setSelectedTechnics] = useState<Technic[]>([]);
+  const [selectedModelist, setSelectedModelist] = useState<User | null>(null);
+  const [modelists, setModelists] = useState<User[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   const [existingImages, setExistingImages] = useState<OrderImage[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [showPriceHistoryModal, setShowPriceHistoryModal] = useState(false);
+  const [priceHistory, setPriceHistory] = useState<ModelPriceHistory | null>(
+    null
+  );
+  const [loadingPriceHistory, setLoadingPriceHistory] = useState(false);
 
   const [showModelModal, setShowModelModal] = useState(false);
   const [showWorkshopModal, setShowWorkshopModal] = useState(false);
@@ -65,16 +81,13 @@ const OrderForm: React.FC = () => {
     show: boolean;
     imageUrl: string;
   }>({ show: false, imageUrl: "" });
-
-  // Türkiye saati ile tarih string'i oluştur
-  const getTurkeyDateString = (): string => {
-    const now = new Date();
-    const turkeyTime = new Date(now.getTime() + 3 * 60 * 60 * 1000);
-    return turkeyTime.toISOString().split("T")[0];
-  };
+  const [qrPrintModal, setQrPrintModal] = useState<{
+    show: boolean;
+    order: Order | null;
+    qrCodeDataUrl: string | null;
+  }>({ show: false, order: null, qrCodeDataUrl: null });
 
   const [newOrder, setNewOrder] = useState({
-    acceptanceDate: getTurkeyDateString(),
     deadline: "",
     quantity: 1,
     unit: OrderUnit.Adet,
@@ -89,10 +102,37 @@ const OrderForm: React.FC = () => {
 
   useEffect(() => {
     loadCurrencies();
+    loadModelists();
     if (isEditMode && orderId) {
       loadOrderForEdit(orderId);
+    } else {
+      // Yeni sipariş için otomatik olarak "Atanmamış İşler" atölyesini seç
+      loadDefaultWorkshop();
     }
   }, [isEditMode, orderId]);
+
+  const loadModelists = async () => {
+    try {
+      const modelistsData = await userService.getModelists();
+      setModelists(modelistsData);
+    } catch (error) {
+      console.error("❌ Modelistler yüklenemedi:", error);
+    }
+  };
+
+  const loadDefaultWorkshop = async () => {
+    try {
+      const workshops = await workshopService.getAll();
+      const atanmamisWorkshop = workshops.find(
+        (w) => w.name && w.name.toLowerCase().includes("atanmamış")
+      );
+      if (atanmamisWorkshop) {
+        setSelectedWorkshop(atanmamisWorkshop);
+      }
+    } catch (error) {
+      console.error("❌ Atölyeler yüklenemedi:", error);
+    }
+  };
 
   const loadCurrencies = async () => {
     try {
@@ -103,11 +143,60 @@ const OrderForm: React.FC = () => {
     }
   };
 
+  const loadModelCostsAndAutoFill = async (modelId: string) => {
+    try {
+      setLoadingPriceHistory(true);
+      const history = await modelService.getPriceHistory(modelId);
+      setPriceHistory(history);
+
+      // Eğer fiyat geçmişi varsa modal aç
+      if (history.priceHistory && history.priceHistory.length > 0) {
+        setShowPriceHistoryModal(true);
+      } else {
+        console.log("⚠️ Bu model için fiyat geçmişi bulunamadı");
+      }
+    } catch (error) {
+      console.error("❌ Fiyat geçmişi yüklenemedi:", error);
+    } finally {
+      setLoadingPriceHistory(false);
+    }
+  };
+
+  const handlePriceSelect = (priceItem: ModelPriceHistoryItem) => {
+    // Birim tipini OrderUnit enum'una çevir
+    let orderUnit = OrderUnit.Adet;
+    const unitName = priceItem.orderUnitName.toLowerCase();
+    if (unitName.includes("takım") || unitName.includes("takim")) {
+      orderUnit = OrderUnit.Takim;
+    } else if (unitName.includes("metre")) {
+      orderUnit = OrderUnit.Metre;
+    }
+
+    // Fiyat ve birimi otomatik doldur
+    setNewOrder((prev) => ({
+      ...prev,
+      price: priceItem.price.toFixed(2),
+      unit: orderUnit,
+      currency: priceItem.priceCurrency,
+    }));
+
+    setShowPriceHistoryModal(false);
+
+    console.log("✅ Fiyat seçildi:", {
+      price: priceItem.price,
+      unit: orderUnit,
+      currency: priceItem.priceCurrency,
+    });
+  };
+
   const loadOrderForEdit = async (id: string) => {
     try {
       setLoading(true);
-      const orders = await orderService.getAll();
-      const order = orders.find((o) => o.orderId === id);
+      // Önce mevcut seçimleri temizle
+      setSelectedTechnics([]);
+
+      // Detaylı sipariş bilgisini getById ile al
+      const order = await orderService.getById(id);
 
       if (!order) {
         alert("Sipariş bulunamadı!");
@@ -117,9 +206,6 @@ const OrderForm: React.FC = () => {
 
       setEditingOrder(order);
       setNewOrder({
-        acceptanceDate: order.acceptanceDate
-          ? order.acceptanceDate.split("T")[0]
-          : "",
         deadline: order.deadline ? order.deadline.split("T")[0] : "",
         quantity: order.quantity || 1,
         unit: order.unit !== undefined ? order.unit : OrderUnit.Adet,
@@ -137,11 +223,29 @@ const OrderForm: React.FC = () => {
       setSelectedWorkshop(order.workshop || null);
       setSelectedOperator(order.operator || null);
 
+      // Load selected modelist if modelistUserId exists
+      if (order.modelistUserId && modelists.length > 0) {
+        const modelist = modelists.find(
+          (m) => m.userId === order.modelistUserId
+        );
+        setSelectedModelist(modelist || null);
+      } else {
+        setSelectedModelist(null);
+      }
+
       if (order.orderTechnics && order.orderTechnics.length > 0) {
         const technics = order.orderTechnics
           .map((ot) => ot.technic)
           .filter((t): t is Technic => t !== undefined);
-        setSelectedTechnics(technics);
+        // Duplicate'leri kaldır (technicId'ye göre)
+        const uniqueTechnics = technics.filter(
+          (technic, index, self) =>
+            index === self.findIndex((t) => t.technicId === technic.technicId)
+        );
+        setSelectedTechnics(uniqueTechnics);
+      } else {
+        // Sipariş teknik içermiyorsa listeyi temizle
+        setSelectedTechnics([]);
       }
 
       if (order.images && order.images.length > 0) {
@@ -169,11 +273,6 @@ const OrderForm: React.FC = () => {
       return;
     }
 
-    if (!selectedWorkshop) {
-      alert("Lütfen bir atölye seçin!");
-      return;
-    }
-
     try {
       setLoading(true);
 
@@ -183,8 +282,19 @@ const OrderForm: React.FC = () => {
       if (!selectedModel || !selectedModel.modelId) {
         throw new Error("Seçili model bulunamadı");
       }
-      if (!selectedWorkshop || !selectedWorkshop.workshopId) {
-        throw new Error("Seçili atölye bulunamadı");
+
+      // Atölye seçilmediyse "Atanmamış İşler" atölyesini bul ve ata
+      let workshopToUse = selectedWorkshop;
+      if (!workshopToUse) {
+        try {
+          const workshops = await workshopService.getAll();
+          workshopToUse =
+            workshops.find(
+              (w) => w.name && w.name.toLowerCase().includes("atanmamış")
+            ) || null;
+        } catch (error) {
+          console.error("❌ Atölyeler yüklenemedi:", error);
+        }
       }
 
       const orderTechnics = selectedTechnics.map((technic) => ({
@@ -194,18 +304,29 @@ const OrderForm: React.FC = () => {
         technic: undefined,
       }));
 
+      // Status'u otomatik belirle: "Atanmamış İşler" atölyesi seçilirse veya atölye yoksa Atanmadı, diğer atölyeler için İşlemde
+      const orderStatus =
+        !workshopToUse ||
+        (workshopToUse.name &&
+          workshopToUse.name.toLowerCase().includes("atanmamış"))
+          ? OrderStatus.Atanmadi
+          : OrderStatus.Islemde;
+
       const orderData = {
-        acceptanceDate: new Date(newOrder.acceptanceDate).toISOString(),
+        acceptanceDate: new Date().toISOString(), // Kabul tarihi şu an
         firmId: selectedFirm.firmId,
         modelId: selectedModel.modelId,
         quantity: newOrder.quantity,
-        unit: newOrder.unit,
+        orderUnitId: newOrder.unit, // Backend orderUnitId bekliyor
         pieceCount:
           newOrder.unit === OrderUnit.Takim ? newOrder.pieceCount : undefined,
         price: newOrder.price ? parseFloat(newOrder.price) : undefined,
         priceCurrency: newOrder.currency,
-        workshopId: selectedWorkshop.workshopId, // Artık zorunlu
+        workshopId: workshopToUse?.workshopId || undefined,
         operatorId: selectedOperator?.operatorId || undefined,
+        modelistUserId: selectedModelist?.userId || undefined, // Include modelist if selected
+        status: orderStatus, // Otomatik belirlenen status
+        orderStatusId: orderStatus, // Status ID'yi de gönder
         priority: newOrder.priority || undefined,
         deadline: newOrder.deadline
           ? new Date(newOrder.deadline).toISOString()
@@ -219,6 +340,11 @@ const OrderForm: React.FC = () => {
         images: [],
       };
 
+      console.log("📦 ORDER UNIT VALUE:", newOrder.unit);
+      console.log("📦 ORDER UNIT TYPE:", typeof newOrder.unit);
+      console.log("📦 OrderUnit.Adet =", OrderUnit.Adet);
+      console.log("📦 OrderUnit.Metre =", OrderUnit.Metre);
+      console.log("📦 OrderUnit.Takim =", OrderUnit.Takim);
       console.log("🚀 Submitting order with data:", orderData);
       console.log("👤 Selected operator:", selectedOperator);
       console.log("🏭 Selected workshop:", selectedWorkshop);
@@ -233,18 +359,60 @@ const OrderForm: React.FC = () => {
           technic: undefined,
         }));
 
+        // Backend'e sadece gerekli alanları gönder, nested objeler olmasın
+        // Edit mode'da mevcut statüyü koru - statü değişikliği sadece atölye üzerinden yapılmalı
+        const currentStatus = editingOrder.status || OrderStatus.Atanmadi;
+
         const updateData = {
-          ...editingOrder,
-          ...orderData,
           orderId: editingOrder.orderId,
-          orderTechnics: orderTechnicsForUpdate,
-          images: selectedImages.length > 0 ? [] : editingOrder.images,
+          acceptanceDate: editingOrder.acceptanceDate, // Kabul tarihini koru
+          completionDate: editingOrder.completionDate,
+          deadline: newOrder.deadline
+            ? new Date(newOrder.deadline).toISOString()
+            : undefined,
+          firmId: selectedFirm.firmId,
+          modelId: selectedModel.modelId,
+          quantity: newOrder.quantity,
+          orderUnitId: newOrder.unit,
+          pieceCount:
+            newOrder.unit === OrderUnit.Takim ? newOrder.pieceCount : undefined,
+          price: newOrder.price ? parseFloat(newOrder.price) : undefined,
+          priceCurrency: newOrder.currency,
+          workshopId: selectedWorkshop?.workshopId || undefined,
+          operatorId: selectedOperator?.operatorId || undefined,
+          modelistUserId: selectedModelist?.userId || undefined, // Include modelist if selected
+          priority: newOrder.priority || undefined,
+          note: newOrder.note || undefined,
+          invoice: newOrder.invoice || undefined,
+          invoiceNumber: newOrder.invoiceNumber || undefined,
+          status: currentStatus,
+          orderStatusId: currentStatus, // Mevcut statüyü koru
+          qrCodeUrl: editingOrder.qrCodeUrl,
+          createdAt: editingOrder.createdAt,
+          createdBy: editingOrder.createdBy,
+          updatedAt: editingOrder.updatedAt,
+          updatedBy: editingOrder.updatedBy,
+          isActive: editingOrder.isActive,
+          orderTechnics: orderTechnicsForUpdate, // Teknikleri de gönder
         };
 
-        await orderService.update(editingOrder.orderId, updateData as Order);
-        resultOrder = updateData as Order;
+        await orderService.update(
+          editingOrder.orderId,
+          updateData as unknown as Order
+        );
+        resultOrder = updateData as unknown as Order;
       } else {
         resultOrder = await orderService.create(orderData as any);
+        console.log("✅ Order created successfully:", resultOrder);
+        console.log(
+          "✅ Full response data:",
+          JSON.stringify(resultOrder, null, 2)
+        );
+        if (resultOrder.qrCodeUrl) {
+          console.log("✅ QR Code URL received:", resultOrder.qrCodeUrl);
+        } else {
+          console.warn("⚠️ QR Code URL not found in response");
+        }
       }
 
       // Resimleri yükle
@@ -257,29 +425,83 @@ const OrderForm: React.FC = () => {
         }
       }
 
-      alert(`Sipariş başarıyla ${isEditMode ? "güncellendi" : "oluşturuldu"}!`);
+      // Yeni sipariş oluşturulduğunda QR modal göster
+      if (!isEditMode && resultOrder) {
+        setLoading(false);
+
+        // QR Code URL'den QR kod oluştur
+        let qrDataUrl: string | null = null;
+        if (resultOrder.qrCodeUrl) {
+          try {
+            console.log(
+              "🔄 Generating QR code from URL:",
+              resultOrder.qrCodeUrl
+            );
+            qrDataUrl = await QRCode.toDataURL(resultOrder.qrCodeUrl, {
+              width: 400,
+              margin: 2,
+              color: {
+                dark: "#000000",
+                light: "#FFFFFF",
+              },
+              errorCorrectionLevel: "H",
+            });
+            console.log("✅ QR code generated successfully");
+          } catch (qrError) {
+            console.error("❌ Failed to generate QR code:", qrError);
+          }
+        } else {
+          console.warn(
+            "⚠️ No QR Code URL in response, cannot generate QR code"
+          );
+        }
+
+        setQrPrintModal({
+          show: true,
+          order: resultOrder,
+          qrCodeDataUrl: qrDataUrl,
+        });
+        return; // Modal kapatılınca handleGoBack çağrılacak
+      }
+
+      alert("Sipariş başarıyla güncellendi!");
       handleGoBack(); // Önceki sayfaya dön
     } catch (error: any) {
-      alert(
-        `Sipariş ${isEditMode ? "güncellenemedi" : "oluşturulamadı"}: ` +
-          (error.response?.data || error.message)
-      );
+      console.error("❌ Order submission error:", error);
+
+      let errorMessage = `Sipariş ${
+        isEditMode ? "güncellenemedi" : "oluşturulamadı"
+      }`;
+
+      if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
+        errorMessage =
+          "İşlem zaman aşımına uğradı. Sipariş oluşturulmuş olabilir, lütfen sipariş listesini kontrol edin.";
+      } else if (error.response?.data) {
+        errorMessage += `: ${error.response.data}`;
+      } else if (error.message) {
+        errorMessage += `: ${error.message}`;
+      }
+
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   const handleSelectTechnic = (technic: Technic) => {
-    const isAlreadySelected = selectedTechnics.some(
-      (t) => t.technicId === technic.technicId
-    );
-    if (isAlreadySelected) {
-      setSelectedTechnics(
-        selectedTechnics.filter((t) => t.technicId !== technic.technicId)
+    setSelectedTechnics((prev) => {
+      const isAlreadySelected = prev.some(
+        (t) => t.technicId === technic.technicId
       );
-    } else {
-      setSelectedTechnics([...selectedTechnics, technic]);
-    }
+
+      if (isAlreadySelected) {
+        // Zaten seçili ise kaldır
+        return prev.filter((t) => t.technicId !== technic.technicId);
+      } else {
+        // Seçili değilse ekle
+        return [...prev, technic];
+      }
+    });
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -318,9 +540,11 @@ const OrderForm: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="orders-container">
-        <div className="loading">Yükleniyor...</div>
-      </div>
+      <PageLoader
+        message={
+          isEditMode ? "Sipariş güncelleniyor..." : "Sipariş oluşturuluyor..."
+        }
+      />
     );
   }
 
@@ -337,21 +561,7 @@ const OrderForm: React.FC = () => {
 
             <div className="form-row">
               <div className="form-group">
-                <label>Kabul Tarihi *</label>
-                <input
-                  type="date"
-                  value={newOrder.acceptanceDate}
-                  onChange={(e) =>
-                    setNewOrder({
-                      ...newOrder,
-                      acceptanceDate: e.target.value,
-                    })
-                  }
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Teslim Tarihi (Termin)</label>
+                <label>Termin Tarihi</label>
                 <input
                   type="date"
                   value={newOrder.deadline}
@@ -399,11 +609,7 @@ const OrderForm: React.FC = () => {
               <div className="select-with-button">
                 <input
                   type="text"
-                  value={
-                    selectedModel
-                      ? `${selectedModel.modelCode} - ${selectedModel.modelName}`
-                      : ""
-                  }
+                  value={selectedModel ? selectedModel.modelName : ""}
                   readOnly
                   placeholder="Model seçmek için tıklayın"
                   onClick={() => setShowModelModal(true)}
@@ -431,6 +637,11 @@ const OrderForm: React.FC = () => {
                       quantity: parseInt(e.target.value),
                     })
                   }
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                      e.preventDefault();
+                    }
+                  }}
                   required
                 />
               </div>
@@ -470,6 +681,11 @@ const OrderForm: React.FC = () => {
                         pieceCount: parseInt(e.target.value),
                       })
                     }
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                        e.preventDefault();
+                      }
+                    }}
                     placeholder="Bir takımda kaç parça var?"
                     required
                   />
@@ -487,6 +703,11 @@ const OrderForm: React.FC = () => {
                   onChange={(e) =>
                     setNewOrder({ ...newOrder, price: e.target.value })
                   }
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                      e.preventDefault();
+                    }
+                  }}
                 />
               </div>
               <div className="form-group">
@@ -514,92 +735,96 @@ const OrderForm: React.FC = () => {
           </div>
 
           <div className="form-section">
-            <h3>Atölye ve Operatör</h3>
+            <h3>{isEditMode ? "Atölye ve Operatör" : "Teknikler"}</h3>
 
-            <div className="form-group">
-              <label>Atölye *</label>
-              <div className="select-with-button">
-                <input
-                  type="text"
-                  value={selectedWorkshop?.name || ""}
-                  readOnly
-                  placeholder="Atölye seçmek için tıklayın"
-                  onClick={() => setShowWorkshopModal(true)}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowWorkshopModal(true)}
-                  className="select-button"
-                >
-                  Seç
-                </button>
-                {selectedWorkshop && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedWorkshop(null)}
-                    className="clear-button"
-                  >
-                    Temizle
-                  </button>
-                )}
-              </div>
-            </div>
+            {/* Atölye ve Operatör sadece düzenleme modunda gösterilir */}
+            {isEditMode && (
+              <>
+                <div className="form-group">
+                  <label>Atölye</label>
+                  <div className="select-with-button">
+                    <input
+                      type="text"
+                      value={selectedWorkshop?.name || ""}
+                      readOnly
+                      placeholder="Atölye seçmek için tıklayın"
+                      onClick={() => setShowWorkshopModal(true)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowWorkshopModal(true)}
+                      className="select-button"
+                    >
+                      Seç
+                    </button>
+                    {selectedWorkshop && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWorkshop(null)}
+                        className="clear-button"
+                      >
+                        Temizle
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-            <div className="form-group">
-              <label>Operatör</label>
-              <div className="select-with-button">
-                <input
-                  type="text"
-                  value={
-                    selectedOperator
-                      ? `${selectedOperator.firstName} ${selectedOperator.lastName}`
-                      : ""
-                  }
-                  readOnly
-                  placeholder={
-                    !selectedWorkshop
-                      ? "Önce atölye seçiniz"
-                      : "Operatör seçmek için tıklayın"
-                  }
-                  onClick={() => {
-                    if (selectedWorkshop) {
-                      setShowOperatorModal(true);
-                    }
-                  }}
-                  disabled={!selectedWorkshop}
-                  style={{
-                    cursor: !selectedWorkshop ? "not-allowed" : "pointer",
-                    opacity: !selectedWorkshop ? 0.6 : 1,
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectedWorkshop) {
-                      setShowOperatorModal(true);
-                    }
-                  }}
-                  className="select-button"
-                  disabled={!selectedWorkshop}
-                  style={{
-                    cursor: !selectedWorkshop ? "not-allowed" : "pointer",
-                    opacity: !selectedWorkshop ? 0.6 : 1,
-                  }}
-                >
-                  Seç
-                </button>
-                {selectedOperator && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedOperator(null)}
-                    className="clear-button"
-                  >
-                    Temizle
-                  </button>
-                )}
-              </div>
-            </div>
+                <div className="form-group">
+                  <label>Operatör</label>
+                  <div className="select-with-button">
+                    <input
+                      type="text"
+                      value={
+                        selectedOperator
+                          ? `${selectedOperator.firstName} ${selectedOperator.lastName}`
+                          : ""
+                      }
+                      readOnly
+                      placeholder={
+                        !selectedWorkshop
+                          ? "Önce atölye seçiniz"
+                          : "Operatör seçmek için tıklayın"
+                      }
+                      onClick={() => {
+                        if (selectedWorkshop) {
+                          setShowOperatorModal(true);
+                        }
+                      }}
+                      disabled={!selectedWorkshop}
+                      style={{
+                        cursor: !selectedWorkshop ? "not-allowed" : "pointer",
+                        opacity: !selectedWorkshop ? 0.6 : 1,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedWorkshop) {
+                          setShowOperatorModal(true);
+                        }
+                      }}
+                      className="select-button"
+                      disabled={!selectedWorkshop}
+                      style={{
+                        cursor: !selectedWorkshop ? "not-allowed" : "pointer",
+                        opacity: !selectedWorkshop ? 0.6 : 1,
+                      }}
+                    >
+                      Seç
+                    </button>
+                    {selectedOperator && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOperator(null)}
+                        className="clear-button"
+                      >
+                        Temizle
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className="form-group">
               <label>Teknikler</label>
@@ -659,6 +884,35 @@ const OrderForm: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Modelist selection - only show for digital or sticket techniques */}
+            {selectedTechnics.some(
+              (t) =>
+                t.name.toLowerCase().includes("digital") ||
+                t.name.toLowerCase().includes("dijital") ||
+                t.name.toLowerCase().includes("sticket") ||
+                t.name.toLowerCase().includes("sticker")
+            ) && (
+              <div className="form-group">
+                <label>Modelist</label>
+                <select
+                  value={selectedModelist?.userId || ""}
+                  onChange={(e) => {
+                    const modelist = modelists.find(
+                      (m) => m.userId === e.target.value
+                    );
+                    setSelectedModelist(modelist || null);
+                  }}
+                >
+                  <option value="">Modelist seçin</option>
+                  {modelists.map((modelist) => (
+                    <option key={modelist.userId} value={modelist.userId}>
+                      {modelist.firstName} {modelist.lastName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="form-section">
@@ -816,7 +1070,12 @@ const OrderForm: React.FC = () => {
       <ModelModal
         isOpen={showModelModal}
         onClose={() => setShowModelModal(false)}
-        onSelect={(model) => setSelectedModel(model)}
+        onSelect={(model) => {
+          setSelectedModel(model);
+          if (model && !isEditMode) {
+            loadModelCostsAndAutoFill(model.modelId);
+          }
+        }}
       />
       <WorkshopModal
         isOpen={showWorkshopModal}
@@ -834,6 +1093,7 @@ const OrderForm: React.FC = () => {
         onClose={() => setShowTechnicModal(false)}
         onSelectTechnic={handleSelectTechnic}
         selectedTechnics={selectedTechnics}
+        onClearAll={() => setSelectedTechnics([])}
       />
       <FirmModal
         isOpen={showFirmModal}
@@ -898,6 +1158,467 @@ const OrderForm: React.FC = () => {
               boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
             }}
           />
+        </div>
+      )}
+
+      {/* QR Print Modal */}
+      {qrPrintModal.show && qrPrintModal.order && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10000,
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "30px",
+              maxWidth: "500px",
+              width: "90%",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                color: "white",
+                padding: "15px",
+                borderRadius: "12px",
+                marginBottom: "20px",
+              }}
+            >
+              <h2 style={{ margin: "0 0 8px 0", fontSize: "24px" }}>
+                ✅ Sipariş Başarıyla Oluşturuldu!
+              </h2>
+              <p style={{ margin: 0, fontSize: "14px", opacity: 0.9 }}>
+                Sipariş No: <strong>{qrPrintModal.order.orderId}</strong>
+              </p>
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <p
+                style={{
+                  fontSize: "16px",
+                  color: "#333",
+                  marginBottom: "15px",
+                  fontWeight: "600",
+                }}
+              >
+                📋 Sipariş Bilgileri
+              </p>
+              <div
+                style={{
+                  textAlign: "left",
+                  background: "#f8f9fa",
+                  padding: "15px",
+                  borderRadius: "8px",
+                  fontSize: "14px",
+                }}
+              >
+                <p style={{ margin: "6px 0" }}>
+                  <strong>Firma:</strong>{" "}
+                  {qrPrintModal.order.firm?.firmName ||
+                    selectedFirm?.firmName ||
+                    "-"}
+                </p>
+                <p style={{ margin: "6px 0" }}>
+                  <strong>Model:</strong>{" "}
+                  {qrPrintModal.order.model?.modelName ||
+                    selectedModel?.modelName ||
+                    "-"}
+                </p>
+                <p style={{ margin: "6px 0" }}>
+                  <strong>Miktar:</strong> {qrPrintModal.order.quantity}
+                </p>
+                <p style={{ margin: "6px 0" }}>
+                  <strong>Atölye:</strong>{" "}
+                  {qrPrintModal.order.workshop?.name ||
+                    selectedWorkshop?.name ||
+                    "-"}
+                </p>
+              </div>
+            </div>
+
+            {qrPrintModal.qrCodeDataUrl ? (
+              <>
+                <div
+                  style={{
+                    background: "#f0f4ff",
+                    padding: "15px",
+                    borderRadius: "12px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: "14px",
+                      color: "#667eea",
+                      marginBottom: "10px",
+                      fontWeight: "600",
+                    }}
+                  >
+                    📱 QR Kod Hazır
+                  </p>
+                  <div
+                    style={{
+                      background: "white",
+                      padding: "15px",
+                      borderRadius: "8px",
+                      display: "inline-block",
+                    }}
+                  >
+                    <img
+                      src={qrPrintModal.qrCodeDataUrl}
+                      alt="Order QR Code"
+                      style={{
+                        width: "200px",
+                        height: "200px",
+                        display: "block",
+                      }}
+                    />
+                  </div>
+                  <p
+                    style={{
+                      margin: "10px 0 0 0",
+                      fontSize: "11px",
+                      color: "#666",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {qrPrintModal.order.qrCodeUrl}
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    justifyContent: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      const printWindow = window.open("", "_blank");
+                      if (
+                        printWindow &&
+                        qrPrintModal.qrCodeDataUrl &&
+                        qrPrintModal.order
+                      ) {
+                        printWindow.document.write(`
+                          <html>
+                            <head>
+                              <title>QR Kod - ${
+                                qrPrintModal.order.orderId
+                              }</title>
+                              <style>
+                                body {
+                                  display: flex;
+                                  flex-direction: column;
+                                  align-items: center;
+                                  justify-content: center;
+                                  min-height: 100vh;
+                                  margin: 0;
+                                  font-family: Arial, sans-serif;
+                                }
+                                .qr-container {
+                                  text-align: center;
+                                  padding: 20px;
+                                }
+                                img {
+                                  width: 350px;
+                                  height: 350px;
+                                  margin: 20px 0;
+                                }
+                                .info {
+                                  margin: 10px 0;
+                                  font-size: 14px;
+                                }
+                                @media print {
+                                  body { margin: 0; }
+                                }
+                              </style>
+                            </head>
+                            <body>
+                              <div class="qr-container">
+                                <h2>Sipariş QR Kodu</h2>
+                                <img src="${
+                                  qrPrintModal.qrCodeDataUrl
+                                }" alt="QR Code" />
+                                <div class="info"><strong>Sipariş No:</strong> ${
+                                  qrPrintModal.order.orderId
+                                }</div>
+                                <div class="info"><strong>Firma:</strong> ${
+                                  qrPrintModal.order.firm?.firmName ||
+                                  selectedFirm?.firmName ||
+                                  "-"
+                                }</div>
+                                <div class="info"><strong>Model:</strong> ${
+                                  qrPrintModal.order.model?.modelName ||
+                                  selectedModel?.modelName ||
+                                  "-"
+                                }</div>
+                                <div class="info"><strong>Miktar:</strong> ${
+                                  qrPrintModal.order.quantity
+                                }</div>
+                              </div>
+                            </body>
+                          </html>
+                        `);
+                        printWindow.document.close();
+                        setTimeout(() => {
+                          printWindow.print();
+                        }, 250);
+                      }
+                    }}
+                    style={{
+                      padding: "12px 24px",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      background:
+                        "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      transition: "transform 0.2s",
+                    }}
+                    onMouseOver={(e) =>
+                      (e.currentTarget.style.transform = "scale(1.05)")
+                    }
+                    onMouseOut={(e) =>
+                      (e.currentTarget.style.transform = "scale(1)")
+                    }
+                  >
+                    🖨️ QR Kodu Yazdır
+                  </button>
+
+                  <a
+                    href={qrPrintModal.qrCodeDataUrl || ""}
+                    download={`order-${qrPrintModal.order.orderId}-qr.png`}
+                    style={{
+                      padding: "12px 24px",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      background: "#28a745",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      textDecoration: "none",
+                      cursor: "pointer",
+                      display: "inline-block",
+                      transition: "transform 0.2s",
+                    }}
+                    onMouseOver={(e) =>
+                      (e.currentTarget.style.transform = "scale(1.05)")
+                    }
+                    onMouseOut={(e) =>
+                      (e.currentTarget.style.transform = "scale(1)")
+                    }
+                  >
+                    📥 QR Kodu İndir
+                  </a>
+                </div>
+              </>
+            ) : (
+              <div
+                style={{
+                  background: "#fff3cd",
+                  padding: "15px",
+                  borderRadius: "8px",
+                  marginBottom: "15px",
+                  color: "#856404",
+                  fontSize: "14px",
+                }}
+              >
+                <p>⚠️ QR kod oluşturulamadı.</p>
+                {qrPrintModal.order.qrCodeUrl && (
+                  <p style={{ fontSize: "11px", marginTop: "8px" }}>
+                    URL alındı ama QR kod generate edilemedi:{" "}
+                    {qrPrintModal.order.qrCodeUrl}
+                  </p>
+                )}
+                {!qrPrintModal.order.qrCodeUrl && (
+                  <p style={{ fontSize: "11px", marginTop: "8px" }}>
+                    Backend'den QR URL alınamadı.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                setQrPrintModal({
+                  show: false,
+                  order: null,
+                  qrCodeDataUrl: null,
+                });
+                handleGoBack();
+              }}
+              style={{
+                marginTop: "15px",
+                padding: "10px 24px",
+                fontSize: "14px",
+                fontWeight: "500",
+                background: "#6c757d",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                width: "100%",
+              }}
+            >
+              Kapat ve Siparişlere Dön
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Price History Modal */}
+      {showPriceHistoryModal && priceHistory && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10000,
+          }}
+          onClick={() => setShowPriceHistoryModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "12px",
+              padding: "24px",
+              maxWidth: "800px",
+              width: "90%",
+              maxHeight: "80vh",
+              overflow: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginBottom: "16px", color: "#2c3e50" }}>
+              {priceHistory.modelName}
+            </h3>
+            <p style={{ marginBottom: "20px", color: "#7f8c8d" }}>
+              Daha önce verilen fiyatları seçebilirsiniz
+            </p>
+
+            {loadingPriceHistory ? (
+              <div style={{ textAlign: "center", padding: "40px" }}>
+                Yükleniyor...
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
+                {priceHistory.priceHistory.map((item) => (
+                  <div
+                    key={item.orderId}
+                    style={{
+                      border: "1px solid #dfe6e9",
+                      borderRadius: "8px",
+                      padding: "16px",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      backgroundColor: "#f8f9fa",
+                    }}
+                    onClick={() => handlePriceSelect(item)}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = "#667eea";
+                      e.currentTarget.style.backgroundColor = "#e3f2fd";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "#dfe6e9";
+                      e.currentTarget.style.backgroundColor = "#f8f9fa";
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <div style={{ fontWeight: "600", color: "#2980b9" }}>
+                        {new Intl.NumberFormat("tr-TR", {
+                          style: "currency",
+                          currency: item.priceCurrency,
+                        }).format(item.price)}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "13px",
+                          color: "#7f8c8d",
+                        }}
+                      >
+                        {new Date(item.acceptanceDate).toLocaleDateString(
+                          "tr-TR"
+                        )}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "14px",
+                        color: "#34495e",
+                        display: "flex",
+                        gap: "16px",
+                      }}
+                    >
+                      <span>
+                        <strong>Firma:</strong> {item.firmName}
+                      </span>
+                      <span>
+                        <strong>Miktar:</strong> {item.quantity}{" "}
+                        {item.orderUnitName}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => setShowPriceHistoryModal(false)}
+              style={{
+                marginTop: "20px",
+                padding: "12px",
+                fontSize: "14px",
+                fontWeight: "500",
+                background: "#6c757d",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                width: "100%",
+              }}
+            >
+              İptal
+            </button>
+          </div>
         </div>
       )}
     </div>

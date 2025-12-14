@@ -168,6 +168,12 @@
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+  .images-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+}
+
 @media (max-width: 768px) {
   .image-manager-modal {
     width: 95%;
@@ -175,15 +181,59 @@
   }
 
   .images-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 15px;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
   }
 
   .image-manager-header {
     padding: 15px;
   }
 
+  .image-manager-header h2 {
+    font-size: 20px;
+  }
+
   .image-manager-content {
     padding: 15px;
+  }
+
+  .upload-section {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .image-manager-modal {
+    width: 98%;
+    max-height: 95vh;
+  }
+
+  .images-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+
+  .image-manager-header {
+    padding: 12px;
+  }
+
+  .image-manager-header h2 {
+    font-size: 18px;
+  }
+
+  .image-manager-content {
+    padding: 12px;
+  }
+
+  .upload-section {
+    padding: 12px;
+  }
+
+  .image-card {
+    padding: 8px;
+  }
+
+  .delete-button {
+    padding: 4px;
   }
 }

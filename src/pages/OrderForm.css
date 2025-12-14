@@ -81,7 +81,7 @@
   display: block;
   width: 4px;
   height: 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--btn-primary);
   border-radius: 2px;
 }
 
@@ -175,14 +175,14 @@
 }
 
 .select-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--btn-primary);
   color: white;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
 }
 
 .select-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 6px 16px rgba(25, 118, 210, 0.4);
 }
 
 .clear-button {
@@ -233,14 +233,14 @@
 }
 
 .submit-button {
-  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  background: var(--btn-secondary);
   color: white;
-  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.4);
 }
 
 .submit-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(72, 187, 120, 0.5);
+  box-shadow: 0 6px 20px rgba(46, 125, 50, 0.5);
 }
 
 .submit-button:disabled {
@@ -296,7 +296,6 @@
 .remove-technic:hover {
   background: #1565c0;
   color: white;
-  transform: rotate(90deg);
 }
 
 /* Image Upload */
@@ -409,7 +408,7 @@
 }
 
 .remove-image-btn:hover {
-  transform: rotate(90deg) scale(1.15);
+  transform: scale(1.15);
   box-shadow: 0 6px 16px rgba(214, 48, 49, 0.6);
 }
 
@@ -626,5 +625,15 @@
   .image-preview,
   .upload-area {
     height: 90px;
+  }
+}
+
+/* Spinner Animation */
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
   }
 }
