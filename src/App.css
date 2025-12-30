@@ -71,6 +71,13 @@ code {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  max-width: 100%;
+}
+
+/* Workshop Kanban exception - no max-width constraint on container */
+.workshop-kanban-page {
+  max-width: none !important;
+  width: 100% !important;
 }
 
 /* Responsive adjustments for main content */

@@ -31,7 +31,6 @@ const OperatorModal: React.FC<OperatorModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      console.log("🔧 OperatorModal opened with workshopId:", workshopId);
       loadOperators();
       loadWorkshops();
     }
@@ -78,11 +77,6 @@ const OperatorModal: React.FC<OperatorModalProps> = ({
         specialization: newOperator.specialization || undefined,
         workshopId: newOperator.workshopId || undefined,
       };
-
-      console.log("🔧 Creating operator with data:", operatorData);
-      console.log("🏭 WorkshopId prop:", workshopId);
-      console.log("🏭 NewOperator workshopId:", newOperator.workshopId);
-
       const created = await operatorService.create(operatorData);
       setOperators([...operators, created]);
       setShowAddForm(false);

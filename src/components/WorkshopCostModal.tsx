@@ -240,9 +240,7 @@ const WorkshopCostModal: React.FC<WorkshopCostModalProps> = ({
                                       item.effectivePrice,
                                       item.costItem?.currency
                                     )}{" "}
-                                    /{" "}
-                                    {item.costItem?.costUnit?.unitCode ||
-                                      item.costItem?.unit}
+                                    / {item.costItem?.unit}
                                   </span>
                                   {item.priority && (
                                     <span className="priority-badge">
@@ -273,8 +271,7 @@ const WorkshopCostModal: React.FC<WorkshopCostModalProps> = ({
                                   required
                                 />
                                 <span className="input-unit">
-                                  {item.costItem?.costUnit?.unitCode ||
-                                    item.costItem?.unit}
+                                  {item.costItem?.unit}
                                 </span>
                               </div>
 

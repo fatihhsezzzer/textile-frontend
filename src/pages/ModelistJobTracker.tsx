@@ -258,9 +258,6 @@ const ModelistJobTracker: React.FC = () => {
       const fullName = `${user?.firstName || ""} ${
         user?.lastName || ""
       }`.trim();
-      console.log("FullName:", fullName);
-      console.log("WorkDuration:", form.workDuration);
-
       const formData = new FormData();
       formData.append("UserName", fullName);
       formData.append("PatternCode", form.patternCode);

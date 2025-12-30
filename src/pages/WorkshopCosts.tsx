@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { WorkshopCostItem, Workshop, CostItem, CostCategory } from "../types";
 import { costService, workshopService } from "../services/dataService";
-import { formatCurrency } from "../utils/formatters";
+import { formatCurrency, turkishIncludes } from "../utils/formatters";
 import PageLoader from "../components/PageLoader";
 import "./WorkshopCosts.css";
 
@@ -48,12 +48,9 @@ const WorkshopCosts: React.FC = () => {
 
   const loadWorkshopCosts = async () => {
     if (!workshopId) return;
-    console.log("🔍 Loading workshop costs for workshopId:", workshopId);
     try {
       setLoading(true);
       const data = await costService.getWorkshopCostItems(workshopId);
-      console.log("📦 Workshop costs loaded, count:", data?.length || 0);
-      console.log("📦 Full workshop costs data:", data);
       setWorkshopCosts(data);
     } catch (error) {
       console.error("❌ Failed to load workshop costs:", error);
@@ -111,12 +108,6 @@ const WorkshopCosts: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    console.log("📝 Form submit - formData:", formData);
-    console.log("📝 costItemId:", formData.costItemId);
-    console.log("📝 costItemId type:", typeof formData.costItemId);
-    console.log("📝 costItemId length:", formData.costItemId?.length);
-
     if (!workshopId) return;
 
     if (!formData.costItemId || formData.costItemId.trim() === "") {
@@ -242,14 +233,6 @@ const WorkshopCosts: React.FC = () => {
             </thead>
             <tbody>
               {workshopCosts.map((item) => {
-                console.log("🔍 Workshop cost item:", {
-                  costItemName: item.costItemName,
-                  unitName: item.unitName,
-                  unitCode: item.unitCode,
-                  categoryName: item.categoryName,
-                  fullItem: item,
-                });
-
                 return (
                   <tr key={item.workshopCostItemId}>
                     <td>
@@ -409,12 +392,6 @@ const WorkshopCosts: React.FC = () => {
                   <select
                     value={formData.costItemId}
                     onChange={(e) => {
-                      console.log("🔄 Select changed:", {
-                        value: e.target.value,
-                        selectedIndex: e.target.selectedIndex,
-                        selectedOption:
-                          e.target.options[e.target.selectedIndex]?.text,
-                      });
                       setFormData({ ...formData, costItemId: e.target.value });
                     }}
                     required
@@ -439,13 +416,13 @@ const WorkshopCosts: React.FC = () => {
                           return false;
                         }
                         if (searchTerm) {
-                          const search = searchTerm.toLowerCase();
                           return (
-                            item.itemName.toLowerCase().includes(search) ||
-                            item.costCategory?.categoryName
-                              ?.toLowerCase()
-                              .includes(search) ||
-                            item.description?.toLowerCase().includes(search)
+                            turkishIncludes(item.itemName, searchTerm) ||
+                            turkishIncludes(
+                              item.costCategory?.categoryName || "",
+                              searchTerm
+                            ) ||
+                            turkishIncludes(item.description || "", searchTerm)
                           );
                         }
                         return true;
@@ -467,13 +444,13 @@ const WorkshopCosts: React.FC = () => {
                         )
                           return false;
                         if (searchTerm) {
-                          const search = searchTerm.toLowerCase();
                           return (
-                            item.itemName.toLowerCase().includes(search) ||
-                            item.costCategory?.categoryName
-                              ?.toLowerCase()
-                              .includes(search) ||
-                            item.description?.toLowerCase().includes(search)
+                            turkishIncludes(item.itemName, searchTerm) ||
+                            turkishIncludes(
+                              item.costCategory?.categoryName || "",
+                              searchTerm
+                            ) ||
+                            turkishIncludes(item.description || "", searchTerm)
                           );
                         }
                         return true;

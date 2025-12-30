@@ -30,11 +30,6 @@ const ModelistOrders: React.FC = () => {
       const statusFilter =
         filterStatus !== "all" ? parseInt(filterStatus) : undefined;
       const myOrders = await modelistOrderService.getMyOrders(statusFilter);
-
-      console.log("📦 Modeliste atanan siparişler:", myOrders);
-      console.log("👤 Giriş yapan user:", user);
-      console.log("📊 Bana atanan sipariş sayısı:", myOrders.length);
-
       setOrders(myOrders);
     } catch (err) {
       console.error("❌ Siparişler yüklenemedi:", err);
@@ -48,7 +43,6 @@ const ModelistOrders: React.FC = () => {
     try {
       const statsData = await modelistOrderService.getStats();
       setStats(statsData);
-      console.log("📊 İstatistikler:", statsData);
     } catch (err) {
       console.error("❌ İstatistikler yüklenemedi:", err);
     }

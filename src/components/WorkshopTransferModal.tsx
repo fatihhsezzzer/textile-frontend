@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   WorkshopCostItem,
   OrderWorkshopCost,
-  Operator,
+  User,
   CalculationType,
 } from "../types";
 import { costService } from "../services/dataService";
@@ -12,6 +12,8 @@ import "./WorkshopTransferModal.css";
 // Hesaplama tipine göre parametre sayısı (sipariş adedi hariç)
 const getParamCount = (calcType?: CalculationType): number => {
   switch (calcType) {
+    case CalculationType.CustomCost:
+      return 0; // CustomCost için parametre yok, direkt totalCost girilir
     case CalculationType.Simple:
     case CalculationType.MeterBased:
       return 1;
@@ -42,12 +44,12 @@ interface WorkshopTransferModalProps {
   oldWorkshopName: string;
   newWorkshopId: string | null;
   newWorkshopName: string;
-  operators: Operator[];
-  selectedOperatorId: string;
-  onOperatorChange: (operatorId: string) => void;
+  users: User[];
+  selectedUserId: string;
+  onUserChange: (userId: string) => void;
   onClose: () => void;
   onSave: (
-    operatorId: string,
+    userId: string,
     costs: Omit<
       OrderWorkshopCost,
       | "orderWorkshopCostId"
@@ -67,6 +69,7 @@ interface CostItemInput {
   costItem?: WorkshopCostItem["costItem"];
   calculationType?: CalculationType; // Hesaplama tipi
   quantityUsed: number;
+  totalCost?: number; // CustomCost için direkt toplam tutar
   quantity2?: number; // İkinci boyut (opsiyonel)
   quantity3?: number; // Üçüncü boyut (opsiyonel, referans)
   unit?: string; // Ana birim adı
@@ -90,9 +93,9 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
   oldWorkshopName,
   newWorkshopId,
   newWorkshopName,
-  operators,
-  selectedOperatorId,
-  onOperatorChange,
+  users,
+  selectedUserId,
+  onUserChange,
   onClose,
   onSave,
 }) => {
@@ -110,8 +113,9 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
   const [showCostList, setShowCostList] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [currentStep, setCurrentStep] = useState<"operator" | "costs">(
-    "operator"
+  const [currentStep, setCurrentStep] = useState<"user" | "costs">("user");
+  const [userListTab, setUserListTab] = useState<"workshop" | "all">(
+    "workshop"
   );
   const [editingCostItem, setEditingCostItem] = useState<{
     item: WorkshopCostItem;
@@ -121,7 +125,8 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       // Modal açıldığında step'i sıfırla
-      setCurrentStep("operator");
+      setCurrentStep("user");
+      setUserListTab("workshop");
       setSelectedCosts(new Map());
       setCompletedCosts(new Map());
       setEditingCostItem(null);
@@ -144,32 +149,22 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
       oldWorkshopId === "null" ||
       oldWorkshopId === "undefined"
     ) {
-      console.log("⚠️ No valid workshop ID, skipping cost items load");
       setWorkshopCostItems([]);
       return;
     }
 
     try {
       setLoading(true);
-      console.log("📥 Loading cost items for workshop:", oldWorkshopId);
       const items = await costService.getWorkshopCostItems(oldWorkshopId);
-      console.log("✅ Received cost items:", items);
-      console.log("📊 Items count:", items?.length || 0);
-
       const filteredItems = items
         .filter((item) => {
           // isActive undefined ise true kabul et (API'den gelmiyor)
           const isActiveCheck = item.isActive === undefined || item.isActive;
           // costItemId varlığını kontrol et (her zaman olmalı)
           const hasCostItemId = !!item.costItemId;
-          console.log(
-            `   Item ${item.costItemId}: isActive=${isActiveCheck}, hasCostItemId=${hasCostItemId}`
-          );
           return isActiveCheck && hasCostItemId;
         })
         .sort((a, b) => (a.priority || 999) - (b.priority || 999));
-
-      console.log("✅ Filtered items count:", filteredItems.length);
       setWorkshopCostItems(filteredItems);
     } catch (error) {
       console.error("❌ Failed to load workshop cost items:", error);
@@ -180,9 +175,9 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
     }
   };
 
-  const handleOperatorNext = () => {
-    if (!selectedOperatorId) {
-      alert("Lütfen bir operatör seçin!");
+  const handleUserNext = () => {
+    if (!selectedUserId) {
+      alert("Lütfen bir kullanıcı seçin!");
       return;
     }
 
@@ -214,8 +209,8 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
         costItemId: item.costItemId,
         costItem: item.costItem,
         calculationType: calcType,
-        quantityUsed: 0,
-        quantity2: paramCount >= 2 ? 0 : undefined,
+        quantityUsed: "" as any, // Başlangıçta boş
+        quantity2: paramCount >= 2 ? ("" as any) : undefined,
         quantity3: needsOrderQty ? orderQuantity || 0 : undefined,
         unit: item.unitName || item.unitCode || "Birim",
         unit2: paramCount >= 2 ? item.unitName2 || "Birim 2" : undefined,
@@ -262,27 +257,46 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
 
     const input = editingCostItem.input;
 
-    // Validasyon
-    if (input.quantityUsed <= 0) {
-      alert("Miktar sıfırdan büyük olmalıdır!");
-      return;
-    }
+    // CustomCost için özel validasyon
+    if (input.calculationType === CalculationType.CustomCost) {
+      if (!input.totalCost || input.totalCost <= 0) {
+        alert("Toplam tutar sıfırdan büyük olmalıdır!");
+        return;
+      }
+    } else {
+      // Diğer hesaplama tipleri için mevcut validasyon
+      if (input.quantityUsed < 0) {
+        alert("Miktar sıfırdan küçük olamaz!");
+        return;
+      }
 
-    const paramCount = getParamCount(input.calculationType);
-    if (paramCount >= 2 && (!input.quantity2 || input.quantity2 <= 0)) {
-      alert(`${input.unit2 || "İkinci birim"} miktarı girmeniz gerekiyor!`);
-      return;
-    }
+      const paramCount = getParamCount(input.calculationType);
+      if (
+        paramCount >= 2 &&
+        (input.quantity2 === undefined || input.quantity2 < 0)
+      ) {
+        alert(`${input.unit2 || "İkinci birim"} miktarı girmeniz gerekiyor!`);
+        return;
+      }
 
-    if (input.unit3 && (!input.quantity3 || input.quantity3 <= 0)) {
-      alert(`${input.unit3} miktarı girmeniz gerekiyor!`);
-      return;
+      if (
+        input.unit3 &&
+        (input.quantity3 === undefined || input.quantity3 < 0)
+      ) {
+        alert(`${input.unit3} miktarı girmeniz gerekiyor!`);
+        return;
+      }
     }
 
     // Tamamlanmışlara ekle
     const newCompleted = new Map(completedCosts);
     newCompleted.set(editingCostItem.item.costItemId, input);
     setCompletedCosts(newCompleted);
+
+    console.log("✅ Cost item saved to completedCosts:", {
+      costItemId: editingCostItem.item.costItemId,
+      input: input,
+    });
 
     // Modalı kapat
     setEditingCostItem(null);
@@ -305,8 +319,8 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
   };
 
   const handleFinalSave = async () => {
-    if (!selectedOperatorId) {
-      alert("Lütfen bir operatör seçin!");
+    if (!selectedUserId) {
+      alert("Lütfen bir kullanıcı seçin!");
       return;
     }
 
@@ -319,16 +333,14 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
     // Maliyet girişi opsiyonel - zorunlu değil
 
     // Onay mesajı
-    const operatorName = operators.find(
-      (op) => op.operatorId === selectedOperatorId
-    );
-    const operatorFullName = operatorName
-      ? `${operatorName.firstName} ${operatorName.lastName}`
-      : "Seçili operatör";
+    const selectedUser = users.find((u) => u.userId === selectedUserId);
+    const userFullName = selectedUser
+      ? `${selectedUser.firstName} ${selectedUser.lastName}`
+      : "Seçili kullanıcı";
     const costCount = completedCosts.size;
     const confirmMessage = oldWorkshopId
-      ? `${oldWorkshopName} atölyesinden ${newWorkshopName} atölyesine transfer edilecek.\n\nOperatör: ${operatorFullName}\nMaliyet Kalemi: ${costCount} adet\n\nOnaylıyor musunuz?`
-      : `${newWorkshopName} atölyesine atama yapılacak.\n\nOperatör: ${operatorFullName}\n\nOnaylıyor musunuz?`;
+      ? `${oldWorkshopName} atölyesinden ${newWorkshopName} atölyesine transfer edilecek.\n\nKullanıcı: ${userFullName}\nMaliyet Kalemi: ${costCount} adet\n\nOnaylıyor musunuz?`
+      : `${newWorkshopName} atölyesine atama yapılacak.\n\nKullanıcı: ${userFullName}\n\nOnaylıyor musunuz?`;
 
     if (!window.confirm(confirmMessage)) {
       return;
@@ -337,32 +349,52 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
     try {
       setSaving(true);
 
-      const costsToSave = Array.from(completedCosts.values()).map((input) => ({
-        orderId,
-        workshopId: oldWorkshopId || "",
-        costItemId: input.costItemId,
-        quantityUsed: input.quantityUsed,
-        quantity2: input.quantity2,
-        quantity3: input.quantity3,
-        unit: input.unit || "Birim",
-        unit2: input.unit2,
-        unit3: input.unit3,
-        costUnitId3: input.costUnitId3,
-        actualPrice: input.actualPrice,
-        currency: input.currency,
-        totalCost:
-          input.quantityUsed * (input.quantity2 || 1) * input.actualPrice,
-        notes: input.notes.trim() || undefined,
-        isActive: true,
-      }));
+      const costsToSave = Array.from(completedCosts.values()).map((input) => {
+        // CustomCost tipinde totalCost direkt kullanılır
+        const isCustomCost =
+          input.calculationType === CalculationType.CustomCost;
 
-      await onSave(selectedOperatorId, costsToSave);
+        console.log("🔍 Input data:", {
+          costItemId: input.costItemId,
+          calculationType: input.calculationType,
+          isCustomCost,
+          totalCost: input.totalCost,
+          quantityUsed: input.quantityUsed,
+          actualPrice: input.actualPrice,
+        });
+
+        const costData = {
+          orderId,
+          workshopId: oldWorkshopId || "",
+          costItemId: input.costItemId,
+          quantityUsed: isCustomCost ? 0 : input.quantityUsed, // CustomCost'ta quantity kullanılmaz
+          quantity2: isCustomCost ? undefined : input.quantity2,
+          quantity3: isCustomCost ? undefined : input.quantity3,
+          unit: input.unit || "Birim",
+          unit2: isCustomCost ? undefined : input.unit2,
+          unit3: isCustomCost ? undefined : input.unit3,
+          costUnitId3: isCustomCost ? undefined : input.costUnitId3,
+          actualPrice: isCustomCost ? 0 : input.actualPrice, // CustomCost'ta birim fiyat kullanılmaz
+          currency: input.currency,
+          totalCost: isCustomCost
+            ? input.totalCost || 0
+            : input.quantityUsed * (input.quantity2 || 1) * input.actualPrice,
+          notes: input.notes.trim() || undefined,
+          isActive: true,
+        };
+
+        console.log("📤 Cost data to save:", costData);
+
+        return costData;
+      });
+
+      await onSave(selectedUserId, costsToSave);
 
       // Başarılı, state'i temizle
       setSelectedCosts(new Map());
       setCompletedCosts(new Map());
       setEditingCostItem(null);
-      setCurrentStep("operator");
+      setCurrentStep("user");
     } catch (error: any) {
       console.error("❌ Failed to save:", error);
       alert(error.message || "İşlem başarısız oldu!");
@@ -372,7 +404,7 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
   };
 
   const handleBack = () => {
-    setCurrentStep("operator");
+    setCurrentStep("user");
   };
 
   if (!isOpen) return null;
@@ -386,7 +418,7 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
         <div className="workshop-transfer-modal-header">
           <div>
             <h2>
-              {currentStep === "operator"
+              {currentStep === "user"
                 ? "🏭 Atölye Transferi"
                 : "💰 Atölye Maliyetleri"}
             </h2>
@@ -404,11 +436,11 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
           <div className="step-indicator">
             <div
               className={`step ${
-                currentStep === "operator" ? "active" : "completed"
+                currentStep === "user" ? "active" : "completed"
               }`}
             >
               <div className="step-number">1</div>
-              <span>Operatör Seçimi</span>
+              <span>Kullanıcı Seçimi</span>
             </div>
             {oldWorkshopId && (
               <>
@@ -423,42 +455,103 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
             )}
           </div>
 
-          {/* Step 1: Operator Selection */}
-          {currentStep === "operator" && (
+          {/* Step 1: User Selection */}
+          {currentStep === "user" && (
             <div className="operator-selection">
               <h3>
-                Operatör Seçin: <span style={{ color: "#d32f2f" }}>*</span>
+                Kullanıcı Seçin: <span style={{ color: "#d32f2f" }}>*</span>
               </h3>
+
+              {/* Tab Buttons */}
+              <div
+                className="user-list-tabs"
+                style={{ display: "flex", gap: "10px", marginBottom: "15px" }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setUserListTab("workshop")}
+                  style={{
+                    flex: 1,
+                    padding: "10px 15px",
+                    border: "2px solid",
+                    borderColor:
+                      userListTab === "workshop" ? "#2196F3" : "#ddd",
+                    backgroundColor:
+                      userListTab === "workshop" ? "#e3f2fd" : "white",
+                    color: userListTab === "workshop" ? "#2196F3" : "#666",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: userListTab === "workshop" ? "600" : "normal",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  Atölyedeki Kullanıcılar (
+                  {users.filter((u) => u.workshopId === oldWorkshopId).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUserListTab("all")}
+                  style={{
+                    flex: 1,
+                    padding: "10px 15px",
+                    border: "2px solid",
+                    borderColor: userListTab === "all" ? "#2196F3" : "#ddd",
+                    backgroundColor:
+                      userListTab === "all" ? "#e3f2fd" : "white",
+                    color: userListTab === "all" ? "#2196F3" : "#666",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: userListTab === "all" ? "600" : "normal",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  Tüm Kullanıcılar ({users.length})
+                </button>
+              </div>
+
+              {/* User List */}
               <div className="operators-grid">
-                {operators.map((operator) => (
+                {(userListTab === "workshop"
+                  ? users.filter((u) => u.workshopId === oldWorkshopId)
+                  : users
+                ).map((user) => (
                   <div
-                    key={operator.operatorId}
+                    key={user.userId}
                     className={`operator-card ${
-                      selectedOperatorId === operator.operatorId
-                        ? "selected"
-                        : ""
+                      selectedUserId === user.userId ? "selected" : ""
                     }`}
-                    onClick={() => onOperatorChange(operator.operatorId)}
+                    onClick={() => onUserChange(user.userId)}
                   >
                     <div className="operator-avatar">
-                      {operator.firstName.charAt(0)}
-                      {operator.lastName.charAt(0)}
+                      {user.firstName.charAt(0)}
+                      {user.lastName.charAt(0)}
                     </div>
                     <div className="operator-info">
                       <strong>
-                        {operator.firstName} {operator.lastName}
+                        {user.firstName} {user.lastName}
                       </strong>
-                      {operator.specialization && (
-                        <span className="specialization">
-                          {operator.specialization}
-                        </span>
-                      )}
+                      <span className="specialization">{user.role}</span>
                     </div>
-                    {selectedOperatorId === operator.operatorId && (
+                    {selectedUserId === user.userId && (
                       <div className="check-icon">✓</div>
                     )}
                   </div>
                 ))}
+                {(userListTab === "workshop"
+                  ? users.filter((u) => u.workshopId === oldWorkshopId).length
+                  : users.length) === 0 && (
+                  <div
+                    style={{
+                      padding: "20px",
+                      textAlign: "center",
+                      color: "#666",
+                    }}
+                  >
+                    {userListTab === "workshop"
+                      ? "Bu atölyede henüz kullanıcı bulunmuyor."
+                      : "Sistemde kayıtlı kullanıcı bulunmuyor."}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -617,11 +710,16 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
                                 {item.costItemName}
                               </span>
                               <span style={{ color: "#666", fontSize: "12px" }}>
-                                ({costInput.quantityUsed}
-                                {costInput.quantity2
-                                  ? ` × ${costInput.quantity2}`
-                                  : ""}
-                                )
+                                {costInput.calculationType ===
+                                CalculationType.CustomCost
+                                  ? `(${formatNumber(
+                                      costInput.totalCost || 0
+                                    )} ${costInput.currency})`
+                                  : `(${costInput.quantityUsed}${
+                                      costInput.quantity2
+                                        ? ` × ${costInput.quantity2}`
+                                        : ""
+                                    })`}
                               </span>
                               <span
                                 style={{
@@ -809,7 +907,7 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
         </div>
 
         <div className="workshop-transfer-modal-footer">
-          {currentStep === "operator" ? (
+          {currentStep === "user" ? (
             <>
               <button
                 type="button"
@@ -822,8 +920,8 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
               <button
                 type="button"
                 className="next-button"
-                onClick={handleOperatorNext}
-                disabled={!selectedOperatorId || saving}
+                onClick={handleUserNext}
+                disabled={!selectedUserId || saving}
               >
                 {oldWorkshopName === "Atanmamış İşler"
                   ? "Kaydet"
@@ -883,62 +981,134 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
             </div>
 
             <div className="cost-item-input-modal-body">
-              {/* Ana Miktar */}
-              <div className="cost-input-field">
-                <label>
-                  {editingCostItem.input?.quantity1Label || "Miktar"} (
-                  {editingCostItem.item.unitName ||
-                    editingCostItem.item.unitCode ||
-                    "Birim"}
-                  )<span className="required-star">*</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={editingCostItem.input?.quantityUsed || ""}
-                  onChange={(e) =>
-                    updateEditingCostItemInput(
-                      "quantityUsed",
-                      parseFloat(e.target.value) || 0
-                    )
-                  }
-                  placeholder="Miktar girin"
-                  required
-                  autoFocus
-                />
-              </div>
-
-              {/* İkinci Boyut */}
-              {editingCostItem.input?.unit2 && (
-                <div className="cost-input-field">
-                  <label>
-                    {editingCostItem.input?.quantity2Label ||
-                      editingCostItem.input?.unit2}
-                    <span className="required-star">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={editingCostItem.input?.quantity2 || ""}
-                    onChange={(e) =>
-                      updateEditingCostItemInput(
-                        "quantity2",
-                        parseFloat(e.target.value) || 0
-                      )
-                    }
-                    placeholder="Miktar girin"
-                    required
-                  />
-                  <div className="cost-total-info">
-                    Toplam:{" "}
-                    {formatNumber(
-                      (editingCostItem.input?.quantityUsed || 0) *
-                        (editingCostItem.input?.quantity2 || 1)
-                    )}
+              {/* CustomCost için Toplam Tutar */}
+              {editingCostItem.input?.calculationType ===
+              CalculationType.CustomCost ? (
+                <>
+                  <div className="cost-input-field">
+                    <div
+                      style={{
+                        background: "#fff3cd",
+                        border: "2px solid #ffc107",
+                        borderRadius: "8px",
+                        padding: "12px",
+                        marginBottom: "16px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        <svg
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="#ff9800"
+                        >
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+                        </svg>
+                        <strong style={{ color: "#856404" }}>
+                          Özel Maliyet (Fason/Sabit Tutar)
+                        </strong>
+                      </div>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: "13px",
+                          color: "#856404",
+                        }}
+                      >
+                        Bu hesaplama tipinde toplam maliyet tutarı direkt
+                        girilir. Miktar ve birim fiyat kullanılmaz.
+                      </p>
+                    </div>
+                    <label>
+                      Toplam Tutar ({editingCostItem.input?.currency || "TRY"})
+                      <span className="required-star">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editingCostItem.input?.totalCost ?? ""}
+                      onChange={(e) =>
+                        updateEditingCostItemInput(
+                          "totalCost",
+                          e.target.value === "" ? 0 : parseFloat(e.target.value)
+                        )
+                      }
+                      placeholder="Toplam maliyet tutarını girin"
+                      required
+                      autoFocus
+                    />
                   </div>
-                </div>
+                </>
+              ) : (
+                <>
+                  {/* Ana Miktar */}
+                  <div className="cost-input-field">
+                    <label>
+                      {editingCostItem.input?.quantity1Label || "Miktar"} (
+                      {editingCostItem.item.unitName ||
+                        editingCostItem.item.unitCode ||
+                        "Birim"}
+                      )<span className="required-star">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editingCostItem.input?.quantityUsed ?? ""}
+                      onChange={(e) =>
+                        updateEditingCostItemInput(
+                          "quantityUsed",
+                          e.target.value === "" ? 0 : parseFloat(e.target.value)
+                        )
+                      }
+                      placeholder="Miktar girin"
+                      required
+                      autoFocus
+                    />
+                  </div>
+
+                  {/* İkinci Boyut */}
+                  {editingCostItem.input?.unit2 && (
+                    <div className="cost-input-field">
+                      <label>
+                        {editingCostItem.input?.quantity2Label ||
+                          editingCostItem.input?.unit2}
+                        <span className="required-star">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editingCostItem.input?.quantity2 ?? ""}
+                        onChange={(e) =>
+                          updateEditingCostItemInput(
+                            "quantity2",
+                            e.target.value === ""
+                              ? 0
+                              : parseFloat(e.target.value)
+                          )
+                        }
+                        placeholder="Miktar girin"
+                        required
+                      />
+                      <div className="cost-total-info">
+                        Toplam:{" "}
+                        {formatNumber(
+                          (editingCostItem.input?.quantityUsed || 0) *
+                            (editingCostItem.input?.quantity2 || 1)
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Not */}
@@ -968,15 +1138,21 @@ const WorkshopTransferModal: React.FC<WorkshopTransferModalProps> = ({
                 className="cost-save-button"
                 onClick={handleSaveCostItemInput}
                 disabled={
-                  !(
-                    editingCostItem.input?.quantityUsed &&
-                    editingCostItem.input.quantityUsed > 0
-                  ) ||
-                  (!!editingCostItem.input?.unit2 &&
-                    !(
-                      editingCostItem.input?.quantity2 &&
-                      editingCostItem.input.quantity2 > 0
-                    ))
+                  editingCostItem.input?.calculationType ===
+                  CalculationType.CustomCost
+                    ? !(
+                        editingCostItem.input?.totalCost &&
+                        editingCostItem.input.totalCost > 0
+                      )
+                    : !(
+                        editingCostItem.input?.quantityUsed &&
+                        editingCostItem.input.quantityUsed > 0
+                      ) ||
+                      (!!editingCostItem.input?.unit2 &&
+                        !(
+                          editingCostItem.input?.quantity2 &&
+                          editingCostItem.input.quantity2 > 0
+                        ))
                 }
               >
                 ✓ Kaydet

@@ -1,6 +1,6 @@
 ran.reports-container {
   padding: 24px;
-  max-width: 1600px;
+  max-width: 100%;
   margin: 0 auto;
   background: #f8f9fa;
   min-height: 100vh;
@@ -270,35 +270,46 @@ ran.reports-container {
 /* Summary Cards */
 .reports-summary-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
   margin-bottom: 24px;
 }
 
 .summary-card {
   background: white;
-  border-radius: 12px;
-  padding: 24px;
+  border-radius: 16px;
+  padding: 20px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e8e8e8;
-  transition: all 0.2s ease;
+  justify-content: center;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: 1px solid #f0f0f0;
+  transition: all 0.3s ease;
+  text-align: center;
+  min-height: 140px;
 }
 
 .summary-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: #e0e0e0;
 }
 
 .card-icon {
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+
+.card-icon svg {
+  width: 22px;
+  height: 22px;
 }
 
 .card-icon.blue {
@@ -324,20 +335,26 @@ ran.reports-container {
 .card-content {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 4px;
+  width: 100%;
 }
 
 .card-label {
-  font-size: 13px;
+  font-size: 12px;
   color: #666;
   font-weight: 500;
+  text-align: center;
+  line-height: 1.4;
 }
 
 .card-value {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
   color: #1a1a1a;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.8px;
+  text-align: center;
+  line-height: 1.2;
 }
 
 .card-value.positive {
@@ -354,12 +371,14 @@ ran.reports-container {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   border: 1px solid #e8e8e8;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .reports-table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 1400px;
 }
 
 .reports-table thead {
@@ -1157,55 +1176,817 @@ ran.reports-container {
   background: #4b5563;
 }
 
+/* Mobile Cards - Hidden by default */
+.reports-cards-container {
+  display: none;
+}
+
+.desktop-only {
+  display: block;
+}
+
+.mobile-only {
+  display: none;
+}
+
+/* Report Cards for Mobile */
+.report-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e8e8e8;
+  transition: all 0.2s ease;
+}
+
+.report-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.report-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.card-firm {
+  flex: 1;
+}
+
+.card-model {
+  text-align: right;
+}
+
+.report-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.card-row.technics-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.card-row.profit-row {
+  padding-top: 12px;
+  margin-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.card-label {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.report-card-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 2px solid #f0f0f0;
+}
+
+.detail-btn.full-width {
+  width: 100%;
+  justify-content: center;
+  padding: 12px;
+}
+
+.empty-state {
+  background: white;
+  border-radius: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  color: #999;
+  border: 1px solid #e8e8e8;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 15px;
+}
+
+/* Mobile Summary Card */
+.mobile-summary-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 20px;
+  color: white;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+}
+
+.mobile-summary-card h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.summary-row:last-child {
+  border-bottom: none;
+}
+
+.summary-row.total {
+  padding-top: 14px;
+  margin-top: 8px;
+  border-top: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.summary-label {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.summary-value {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.summary-value.amount {
+  color: #a7f3d0;
+}
+
+.summary-value.cost {
+  color: #fcd34d;
+}
+
+.summary-value.profit-loss.positive {
+  color: #a7f3d0;
+}
+
+.summary-value.profit-loss.negative {
+  color: #fca5a5;
+}
+
 /* Responsive */
+
+/* Large Tablets and Small Desktops - 1200px */
+@media (max-width: 1200px) {
+  .reports-container {
+    padding: 20px;
+  }
+
+  .reports-table {
+    min-width: 1200px;
+  }
+
+  .reports-summary-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Tablets - 1024px */
 @media (max-width: 1024px) {
   .reports-container {
     padding: 16px;
   }
 
+  /* Show mobile cards on tablets too */
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: block !important;
+  }
+
+  .reports-header {
+    padding: 24px;
+    border-radius: 12px;
+  }
+
+  .reports-header h1 {
+    font-size: 24px;
+  }
+
+  .reports-header .header-icon {
+    width: 48px;
+    height: 48px;
+  }
+
   .reports-filters {
     flex-direction: column;
     align-items: stretch;
+    gap: 16px;
   }
 
   .filter-group {
     min-width: 100%;
   }
 
+  .searchable-select {
+    min-width: 100%;
+  }
+
   .filter-summary {
     margin-left: 0;
-    justify-content: center;
+    justify-content: space-between;
     padding-top: 16px;
     border-top: 1px solid #e8e8e8;
+    flex-wrap: wrap;
   }
 
-  .reports-table-container {
-    overflow-x: auto;
+  .summary-item {
+    flex: 1;
+    min-width: 150px;
+    justify-content: center;
   }
 
-  .reports-table {
-    min-width: 900px;
+  .cost-detail-modal {
+    width: 98%;
+    max-width: 900px;
+    max-height: 95vh;
+  }
+
+  .cost-detail-header {
+    padding: 16px 20px;
+  }
+
+  .cost-detail-title h2 {
+    font-size: 18px;
+  }
+
+  .cost-detail-info {
+    gap: 6px;
+  }
+
+  .info-badge {
+    padding: 3px 10px;
+    font-size: 11px;
+  }
+
+  .cost-detail-body {
+    padding: 16px;
+  }
+
+  .cost-detail-table {
+    font-size: 13px;
+  }
+
+  .cost-detail-table th {
+    padding: 12px 10px;
+    font-size: 11px;
+  }
+
+  .cost-detail-table td {
+    padding: 12px 10px;
+    font-size: 13px;
+  }
+
+  .workshop-group-header {
+    padding: 12px 14px;
+  }
+
+  .workshop-group-header h4 {
+    font-size: 14px;
   }
 }
 
+/* Small Tablets and Large Phones - 768px */
 @media (max-width: 768px) {
+  .reports-container {
+    padding: 12px;
+  }
+
+  /* Hide desktop table, show mobile cards */
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: block !important;
+  }
+
   .reports-header {
     padding: 20px;
+    border-radius: 10px;
+  }
+
+  .reports-header .header-content {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+
+  .reports-header .header-icon {
+    width: 44px;
+    height: 44px;
   }
 
   .reports-header h1 {
     font-size: 22px;
   }
 
+  .reports-header p {
+    font-size: 14px;
+  }
+
+  .reports-filters {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .clear-dates-btn {
+    align-self: stretch;
+    padding: 12px;
+  }
+
+  .filter-summary {
+    gap: 12px;
+  }
+
+  .summary-item {
+    font-size: 13px;
+  }
+
+  .summary-item strong {
+    font-size: 16px;
+  }
+
   .reports-summary-cards {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .summary-card {
     padding: 18px;
+    gap: 12px;
+  }
+
+  .card-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .card-label {
+    font-size: 12px;
   }
 
   .card-value {
     font-size: 20px;
+  }
+
+  .detail-btn {
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+
+  .cost-detail-modal {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .cost-detail-header {
+    padding: 14px 16px;
+    flex-wrap: wrap;
+  }
+
+  .cost-detail-title h2 {
+    font-size: 17px;
+  }
+
+  .cost-detail-info {
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .info-badge {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+
+  .cost-detail-close {
+    width: 32px;
+    height: 32px;
+    font-size: 22px;
+  }
+
+  .cost-detail-body {
+    padding: 12px;
+  }
+
+  .cost-detail-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .cost-detail-table {
+    font-size: 12px;
+    min-width: 600px;
+  }
+
+  .cost-detail-table th {
+    padding: 10px 8px;
+    font-size: 10px;
+  }
+
+  .cost-detail-table td {
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+
+  .workshop-group-header {
+    padding: 10px 12px;
+  }
+
+  .workshop-group-header h4 {
+    font-size: 13px;
+  }
+
+  .workshop-cost-table th,
+  .workshop-cost-table td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  .cost-detail-grand-total {
+    padding: 14px 12px;
+  }
+
+  .grand-total-label {
+    font-size: 12px;
+  }
+
+  .grand-total-value {
+    font-size: 16px;
+  }
+
+  .cost-detail-footer {
+    padding: 12px 16px;
+  }
+
+  .cost-detail-footer .close-btn {
+    width: 100%;
+    padding: 12px;
+  }
+}
+
+/* Mobile Phones - 480px */
+@media (max-width: 480px) {
+  .reports-container {
+    padding: 8px;
+  }
+
+  .reports-header {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .reports-header .header-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .reports-header .header-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .reports-header h1 {
+    font-size: 20px;
+  }
+
+  .reports-header p {
+    font-size: 13px;
+  }
+
+  .reports-filters {
+    padding: 12px;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .filter-group label {
+    font-size: 11px;
+  }
+
+  .filter-group select,
+  .date-input {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .searchable-select .select-header {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .clear-dates-btn {
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+
+  .filter-summary {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .summary-item {
+    width: 100%;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .summary-item:last-child {
+    border-bottom: none;
+  }
+
+  .report-card {
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+
+  .reports-summary-cards {
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .summary-card {
+    padding: 16px;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .card-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .card-content {
+    width: 100%;
+  }
+
+  .card-label {
+    font-size: 11px;
+  }
+
+  .card-value {
+    font-size: 18px;
+  }
+
+  .mobile-summary-card {
+    padding: 16px;
+    margin-top: 16px;
+  }
+
+  .mobile-summary-card h3 {
+    font-size: 16px;
+    margin-bottom: 12px;
+  }
+
+  .summary-row {
+    padding: 8px 0;
+  }
+
+  .summary-label {
+    font-size: 12px;
+  }
+
+  .summary-value {
+    font-size: 14px;
+  }
+
+  .reports-table-container {
+    margin: 0 -8px;
+    border-radius: 8px;
+  }
+
+  .report-card {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .card-row {
+    padding: 5px 0;
+  }
+
+  .card-label {
+    font-size: 12px;
+  }
+
+  .reports-table {
+    min-width: 800px;
+  }
+
+  .reports-table thead th {
+    padding: 10px 8px;
+    font-size: 10px;
+  }
+
+  .reports-table tbody td {
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+
+  .firm-code {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .model-code {
+    font-size: 12px;
+  }
+
+  .model-name {
+    font-size: 11px;
+  }
+
+  .quantity-badge {
+    padding: 3px 10px;
+    font-size: 12px;
+  }
+
+  .technic-tag {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+
+  .detail-btn {
+    padding: 6px 10px;
+    font-size: 10px;
+  }
+
+  .detail-btn svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .cost-detail-modal {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .cost-detail-header {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .cost-detail-title {
+    flex: 1;
+  }
+
+  .cost-detail-title h2 {
+    font-size: 15px;
+  }
+
+  .cost-detail-info {
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .info-badge {
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+
+  .cost-detail-close {
+    width: 30px;
+    height: 30px;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .cost-detail-body {
+    padding: 10px;
+  }
+
+  .cost-detail-table {
+    font-size: 11px;
+    min-width: 500px;
+  }
+
+  .cost-detail-table th {
+    padding: 8px 6px;
+    font-size: 9px;
+  }
+
+  .cost-detail-table td {
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  .category-badge-small {
+    padding: 2px 6px;
+    font-size: 9px;
+  }
+
+  .workshop-group {
+    margin-bottom: 10px;
+  }
+
+  .workshop-group-header {
+    padding: 10px 12px;
+  }
+
+  .workshop-group-header h4 {
+    font-size: 13px;
+  }
+
+  .workshop-group-count {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .workshop-cost-table th,
+  .workshop-cost-table td {
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  .workshop-group-footer {
+    padding: 10px 12px;
+  }
+
+  .workshop-subtotal-label {
+    font-size: 12px;
+  }
+
+  .workshop-subtotal-value {
+    font-size: 14px;
+  }
+
+  .cost-detail-grand-total {
+    padding: 16px;
+    margin-top: 12px;
+  }
+
+  .grand-total-label {
+    font-size: 13px;
+  }
+
+  .grand-total-value {
+    font-size: 16px;
+  }
+
+  .grand-total-value.unit-cost {
+    font-size: 14px;
+  }
+
+  .cost-detail-footer {
+    padding: 12px;
+  }
+
+  .cost-detail-footer .close-btn {
+    width: 100%;
+    padding: 12px;
+  }
+}
+
+/* Extra Small Phones - 360px */
+@media (max-width: 360px) {
+  .reports-header h1 {
+    font-size: 18px;
+  }
+
+  .reports-header p {
+    font-size: 12px;
+  }
+
+  .card-value {
+    font-size: 16px;
+  }
+
+  .reports-table {
+    min-width: 700px;
+  }
+
+  .reports-table thead th {
+    padding: 8px 6px;
+    font-size: 9px;
+  }
+
+  .reports-table tbody td {
+    padding: 8px 6px;
+    font-size: 11px;
   }
 }

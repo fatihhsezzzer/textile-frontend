@@ -1,14 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { exchangeRateService } from "../services/dataService";
 import { useAuth } from "../context/AuthContext";
+import { useExchangeRates } from "../context/ExchangeRateContext";
 import { formatNumber } from "../utils/formatters";
 import "./Header.css";
-
-interface ExchangeRates {
-  usd: number | null;
-  eur: number | null;
-}
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -16,37 +11,8 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { user, logout } = useAuth();
+  const { usdRate, eurRate, loading } = useExchangeRates();
   const navigate = useNavigate();
-  const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({
-    usd: null,
-    eur: null,
-  });
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchExchangeRate = async () => {
-      try {
-        const rates = await exchangeRateService.getLatest();
-
-        const usdRate = rates.find((rate) => rate.currencyCode === "USD");
-        const eurRate = rates.find((rate) => rate.currencyCode === "EUR");
-
-        setExchangeRates({
-          usd: usdRate ? usdRate.banknoteSelling : null,
-          eur: eurRate ? eurRate.banknoteSelling : null,
-        });
-      } catch (error) {
-        console.error("Kur bilgisi yüklenemedi:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchExchangeRate();
-    const interval = setInterval(fetchExchangeRate, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   const handleLogout = () => {
     logout();
@@ -80,40 +46,39 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           )}
 
           <div className="header-brand">
-            <h1 className="header-title">FATOŞ EMPRİME</h1>
-            <p className="header-subtitle">Sipariş Takip Sistemi</p>
+            <img
+              src="/Images/logo-siyah.png"
+              alt="Logo"
+              className="header-logo"
+            />
           </div>
         </div>
 
         {/* Sağ Bölüm - Döviz, Kullanıcı, Çıkış */}
         <div className="header-right">
           {/* Döviz Kurları */}
-          {!loading && (exchangeRates.usd || exchangeRates.eur) && (
+          {!loading && (usdRate || eurRate) && (
             <div className="header-rates">
-              {exchangeRates.usd && (
+              {usdRate && (
                 <div className="rate-card rate-usd">
                   <div className="rate-icon">
                     <span>$</span>
                   </div>
                   <div className="rate-info">
                     <span className="rate-label">USD</span>
-                    <span className="rate-value">
-                      ₺{formatNumber(exchangeRates.usd)}
-                    </span>
+                    <span className="rate-value">₺{formatNumber(usdRate)}</span>
                   </div>
                 </div>
               )}
 
-              {exchangeRates.eur && (
+              {eurRate && (
                 <div className="rate-card rate-eur">
                   <div className="rate-icon">
                     <span>€</span>
                   </div>
                   <div className="rate-info">
                     <span className="rate-label">EUR</span>
-                    <span className="rate-value">
-                      ₺{formatNumber(exchangeRates.eur)}
-                    </span>
+                    <span className="rate-value">₺{formatNumber(eurRate)}</span>
                   </div>
                 </div>
               )}
@@ -144,27 +109,6 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
               </div>
             </div>
           )}
-
-          {/* Çıkış Butonu */}
-          <button
-            onClick={handleLogout}
-            className="header-logout-btn"
-            aria-label="Çıkış Yap"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            <span className="logout-text">Çıkış</span>
-          </button>
         </div>
       </div>
     </header>

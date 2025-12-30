@@ -84,6 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
                       "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
                     ] ||
                     "User",
+                  isActive: true,
                 };
 
                 setUser(userFromToken);

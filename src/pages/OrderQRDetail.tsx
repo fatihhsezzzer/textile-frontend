@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Order, Workshop, Operator, OrderStatus } from "../types";
+import { Order, Workshop, User, OrderStatus } from "../types";
 import {
   orderService,
   workshopService,
-  operatorService,
+  userService,
 } from "../services/dataService";
 import { costService } from "../services/costService";
 import { formatCurrency, formatNumber } from "../utils/formatters";
@@ -21,26 +21,31 @@ const OrderQRDetail: React.FC = () => {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
-  const [operators, setOperators] = useState<Operator[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>("");
-  const [selectedOperatorId, setSelectedOperatorId] = useState<string>("");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (orderId) {
       loadOrderDetails();
-      loadWorkshops();
-      loadOperators();
+      loadUsers();
     }
   }, [orderId]);
+
+  // Order yüklendiğinde workshops'u yükle
+  useEffect(() => {
+    if (order) {
+      loadWorkshops();
+    }
+  }, [order?.workshopId]);
 
   const loadOrderDetails = async () => {
     try {
       setLoading(true);
       const orderData = await orderService.getById(orderId!);
-      console.log("📦 QR Order loaded:", orderData);
       setOrder(orderData);
     } catch (error) {
       console.error("Failed to load order:", error);
@@ -51,19 +56,51 @@ const OrderQRDetail: React.FC = () => {
 
   const loadWorkshops = async () => {
     try {
-      const data = await workshopService.getAll();
-      setWorkshops(data);
+      // Eğer sipariş bir atölyeye atanmışsa, sadece o atölyeden transfer yapılabilecek atölyeleri getir
+      if (order?.workshopId) {
+        const connections = await workshopService.getConnections(
+          order.workshopId
+        );
+        // Connections'dan workshop listesini çıkar
+        const connectedWorkshops = connections.map(
+          (conn: any) => conn.targetWorkshop
+        );
+        setWorkshops(connectedWorkshops);
+      } else {
+        // Atölye atanmamışsa tüm atölyeleri listele
+        const data = await workshopService.getAll();
+        const sortedData = [...data].sort((a, b) => {
+          const orderA = a.displayOrder ?? 999;
+          const orderB = b.displayOrder ?? 999;
+          if (orderA !== orderB) return orderA - orderB;
+          return a.name.localeCompare(b.name, "tr");
+        });
+        setWorkshops(sortedData);
+      }
     } catch (error) {
       console.error("Failed to load workshops:", error);
+      // Hata durumunda tüm atölyeleri yükle
+      try {
+        const data = await workshopService.getAll();
+        const sortedData = [...data].sort((a, b) => {
+          const orderA = a.displayOrder ?? 999;
+          const orderB = b.displayOrder ?? 999;
+          if (orderA !== orderB) return orderA - orderB;
+          return a.name.localeCompare(b.name, "tr");
+        });
+        setWorkshops(sortedData);
+      } catch (err) {
+        console.error("Failed to load all workshops:", err);
+      }
     }
   };
 
-  const loadOperators = async () => {
+  const loadUsers = async () => {
     try {
-      const data = await operatorService.getAll();
-      setOperators(data);
+      const data = await userService.getAll();
+      setUsers(data);
     } catch (error) {
-      console.error("Failed to load operators:", error);
+      console.error("Failed to load users:", error);
     }
   };
 
@@ -111,17 +148,8 @@ const OrderQRDetail: React.FC = () => {
     return units[unit || 0] || "Adet";
   };
 
-  const handleTransferSave = async (operatorId: string, costs: any[]) => {
+  const handleTransferSave = async (userId: string, costs: any[]) => {
     if (!order) return;
-
-    console.log("🔵 handleTransferSave called with:", {
-      operatorId,
-      costs,
-      costsLength: costs?.length,
-    });
-    console.log("🔍 Order unit value:", order.unit, "Type:", typeof order.unit);
-    console.log("🔍 Full order object:", order);
-
     try {
       // Seçilen atölyeyi bul
       const targetWorkshop = workshops.find(
@@ -149,28 +177,14 @@ const OrderQRDetail: React.FC = () => {
       // Yeni atama endpointi için payload
       const assignPayload = {
         workshopId: selectedWorkshopId,
-        operatorId: operatorId,
+        userId: userId,
         orderStatusId: newStatus,
       };
-      console.log("📤 Sending assignPayload to API:", assignPayload);
       await orderService.assign(orderId!, assignPayload);
-      console.log("✅ Workshop, operator and status assigned successfully");
-
       // Save model costs if any
-      console.log("🔍 Checking costs:", {
-        hasCosts: !!costs,
-        costsLength: costs?.length,
-        costsArray: costs,
-      });
       if (costs && costs.length > 0) {
-        console.log(
-          "💰 Starting to save model costs. Total count:",
-          costs.length
-        );
         for (let i = 0; i < costs.length; i++) {
           const cost = costs[i];
-          console.log(`💰 Processing cost ${i + 1}/${costs.length}:`, cost);
-
           const modelCostData = {
             modelId: order.modelId,
             orderId: order.orderId,
@@ -188,12 +202,8 @@ const OrderQRDetail: React.FC = () => {
             usage: cost.notes || undefined,
             isActive: true,
           };
-
-          console.log(`📤 Sending ModelCost ${i + 1}:`, modelCostData);
           await costService.addModelCost(modelCostData);
-          console.log(`✅ ModelCost ${i + 1} saved successfully`);
         }
-        console.log("✅ All model costs saved successfully");
       } else {
         console.log("ℹ️ No costs to save (costs empty or undefined)");
       }
@@ -201,7 +211,7 @@ const OrderQRDetail: React.FC = () => {
       // Close modal and refresh
       setShowTransferModal(false);
       setSelectedWorkshopId("");
-      setSelectedOperatorId("");
+      setSelectedUserId("");
       await loadOrderDetails();
 
       alert("✅ Atölye transferi başarıyla tamamlandı!");
@@ -645,15 +655,13 @@ const OrderQRDetail: React.FC = () => {
               workshops.find((w) => w.workshopId === selectedWorkshopId)
                 ?.name || "Yeni Atölye"
             }
-            operators={operators.filter(
-              (op) => op.workshopId === order.workshopId
-            )}
-            selectedOperatorId={selectedOperatorId}
-            onOperatorChange={(opId) => setSelectedOperatorId(opId)}
+            users={users}
+            selectedUserId={selectedUserId}
+            onUserChange={(userId) => setSelectedUserId(userId)}
             onClose={() => {
               setShowTransferModal(false);
               setSelectedWorkshopId("");
-              setSelectedOperatorId("");
+              setSelectedUserId("");
             }}
             onSave={handleTransferSave}
           />

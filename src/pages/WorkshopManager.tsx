@@ -3,27 +3,28 @@ import { useNavigate } from "react-router-dom";
 import {
   orderService,
   workshopService,
-  operatorService,
-  exchangeRateService,
+  userService,
   costService,
 } from "../services/dataService";
 import {
   Order,
   Workshop,
-  Operator,
+  User,
   OrderStatus,
   OrderWorkshopCost,
 } from "../types";
 import { useAuth } from "../context/AuthContext";
+import { useExchangeRates } from "../context/ExchangeRateContext";
 import WorkshopTransferModal from "../components/WorkshopTransferModal";
 import "./WorkshopManager.css";
 
 const WorkshopManager: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const { usdRate, eurRate, gbpRate } = useExchangeRates();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
-  const [operators, setOperators] = useState<Operator[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedWorkshop, setSelectedWorkshop] = useState<string>("all");
@@ -39,14 +40,7 @@ const WorkshopManager: React.FC = () => {
     oldWorkshopId: string | undefined;
     orderQuantity?: number;
   } | null>(null);
-  const [selectedOperatorId, setSelectedOperatorId] = useState<string>("");
-
-  const [exchangeRates, setExchangeRates] = useState<{
-    USD: number | null;
-    EUR: number | null;
-    GBP: number | null;
-    date: string;
-  }>({ USD: null, EUR: null, GBP: null, date: new Date().toISOString() });
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -54,43 +48,24 @@ const WorkshopManager: React.FC = () => {
       return;
     }
     loadData();
-    loadExchangeRates();
   }, [isAuthenticated, navigate]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [ordersData, workshopsData, operatorsData] = await Promise.all([
+      const [ordersData, workshopsData, usersData] = await Promise.all([
         orderService.getAll(),
         workshopService.getAll(),
-        operatorService.getAll(),
+        userService.getAll(),
       ]);
       setOrders(ordersData);
       setWorkshops(workshopsData);
-      setOperators(operatorsData);
+      setUsers(usersData);
     } catch (error) {
       console.error("❌ Veri yükleme hatası:", error);
       alert("Veriler yüklenemedi!");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadExchangeRates = async () => {
-    try {
-      const rates = await exchangeRateService.getLatest();
-      const usdRate = rates.find((rate) => rate.currencyCode === "USD");
-      const eurRate = rates.find((rate) => rate.currencyCode === "EUR");
-      const gbpRate = rates.find((rate) => rate.currencyCode === "GBP");
-
-      setExchangeRates({
-        USD: usdRate?.banknoteSelling || null,
-        EUR: eurRate?.banknoteSelling || null,
-        GBP: gbpRate?.banknoteSelling || null,
-        date: usdRate?.rateDate || new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error("⚠️ Döviz kurları yüklenemedi:", error);
     }
   };
 
@@ -203,12 +178,12 @@ const WorkshopManager: React.FC = () => {
       oldWorkshopId: order.workshopId,
       orderQuantity: order.quantity,
     });
-    setSelectedOperatorId(""); // Reset operator selection
+    setSelectedUserId(""); // Reset user selection
     setShowTransferModal(true);
   };
 
   const handleTransferSave = async (
-    operatorId: string,
+    userId: string,
     costs: Omit<
       OrderWorkshopCost,
       | "orderWorkshopCostId"
@@ -241,14 +216,15 @@ const WorkshopManager: React.FC = () => {
             unit3: cost.unit3,
             costUnitId3: cost.costUnitId3,
             unitPrice: cost.actualPrice,
+            totalCost: cost.totalCost, // CustomCost için direkt toplam tutar
             currency: cost.currency,
-            usage: cost.notes || "",
+            notes: cost.notes || "",
             priority: 1,
             isActive: true,
-            usdRate: exchangeRates.USD || undefined,
-            eurRate: exchangeRates.EUR || undefined,
-            gbpRate: exchangeRates.GBP || undefined,
-            exchangeRateDate: exchangeRates.date,
+            usdRate: usdRate || undefined,
+            eurRate: eurRate || undefined,
+            gbpRate: gbpRate || undefined,
+            exchangeRateDate: new Date().toISOString(),
           };
 
           try {
@@ -284,7 +260,7 @@ const WorkshopManager: React.FC = () => {
       // Workshop güncelleme
       const updateData: Partial<Order> = {
         workshopId: newWorkshopId || undefined,
-        operatorId: operatorId || undefined,
+        operatorId: userId || undefined, // userId Order tipinde operatorId olarak saklanıyor
         status: newStatus,
       };
 
@@ -645,14 +621,14 @@ const WorkshopManager: React.FC = () => {
               oldWorkshopName={oldWorkshop?.name || "Atanmamış"}
               newWorkshopId={pendingWorkshopChange.newWorkshopId}
               newWorkshopName={newWorkshop?.name || "Tamamlandı"}
-              operators={operators}
-              selectedOperatorId={selectedOperatorId}
-              onOperatorChange={setSelectedOperatorId}
+              users={users}
+              selectedUserId={selectedUserId}
+              onUserChange={setSelectedUserId}
               onSave={handleTransferSave}
               onClose={() => {
                 setShowTransferModal(false);
                 setPendingWorkshopChange(null);
-                setSelectedOperatorId("");
+                setSelectedUserId("");
               }}
             />
           );

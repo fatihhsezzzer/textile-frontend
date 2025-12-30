@@ -13,13 +13,10 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import {
-  orderService,
-  exchangeRateService,
-  costService,
-} from "../services/dataService";
+import { orderService, costService } from "../services/dataService";
 import { Order, OrderStatus, OrderWorkshopCost } from "../types";
 import { useAuth } from "../context/AuthContext";
+import { useExchangeRates } from "../context/ExchangeRateContext";
 import { useNavigate } from "react-router-dom";
 import { formatCurrency } from "../utils/formatters";
 import PageLoader from "../components/PageLoader";
@@ -30,14 +27,11 @@ import WorkshopCostModal from "../components/WorkshopCostModal";
 
 const Kanban: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const { usdRate, eurRate } = useExchangeRates();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
-  const [exchangeRates, setExchangeRates] = useState<{
-    USD: number | null;
-    EUR: number | null;
-  }>({ USD: null, EUR: null });
 
   // Workshop Cost Modal state
   const [costModalOpen, setCostModalOpen] = useState(false);
@@ -72,30 +66,13 @@ const Kanban: React.FC = () => {
       return;
     }
     loadOrders();
-    loadExchangeRates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, navigate]);
-
-  const loadExchangeRates = async () => {
-    try {
-      const rates = await exchangeRateService.getLatest();
-      const usdRate = rates.find((rate) => rate.currencyCode === "USD");
-      const eurRate = rates.find((rate) => rate.currencyCode === "EUR");
-
-      setExchangeRates({
-        USD: usdRate?.banknoteSelling || null,
-        EUR: eurRate?.banknoteSelling || null,
-      });
-    } catch (error) {
-      console.error("❌ Döviz kurları yüklenemedi:", error);
-    }
-  };
 
   const loadOrders = async () => {
     try {
       setLoading(true);
       const data = await orderService.getAll();
-      console.log("📋 Loaded orders for Kanban:", data.length);
       setOrders(data);
     } catch (error) {
       console.error("❌ Failed to load orders:", error);
@@ -118,10 +95,10 @@ const Kanban: React.FC = () => {
 
       // Dövize göre TL'ye çevir
       let priceInTRY = basePrice;
-      if (currency === "USD" && exchangeRates.USD) {
-        priceInTRY = basePrice * exchangeRates.USD;
-      } else if (currency === "EUR" && exchangeRates.EUR) {
-        priceInTRY = basePrice * exchangeRates.EUR;
+      if (currency === "USD" && usdRate) {
+        priceInTRY = basePrice * usdRate;
+      } else if (currency === "EUR" && eurRate) {
+        priceInTRY = basePrice * eurRate;
       } else if (currency !== "TRY" && currency !== "TL") {
         priceInTRY = 0; // Kur yoksa dönüşüm yapılamaz
       }
@@ -137,7 +114,6 @@ const Kanban: React.FC = () => {
     const order = orders.find((o) => o.orderId === active.id);
     if (order) {
       setActiveOrder(order);
-      console.log("🎯 Drag started:", order.orderId);
     }
   };
 
@@ -149,17 +125,11 @@ const Kanban: React.FC = () => {
     setTimeout(() => setActiveOrder(null), 100);
 
     if (!over) {
-      console.log("❌ Dropped outside valid area");
       return;
     }
 
     const draggedOrderId = active.id as string;
     const targetId = over.id as string;
-
-    console.log(
-      `📍 Drop detected - Dragged: ${draggedOrderId}, Target: ${targetId}`
-    );
-
     const draggedOrder = orders.find((o) => o.orderId === draggedOrderId);
 
     if (!draggedOrder) {
@@ -177,14 +147,12 @@ const Kanban: React.FC = () => {
       Object.values(OrderStatus).includes(numericTargetId)
     ) {
       newStatus = numericTargetId as OrderStatus;
-      console.log("🎯 Dropped on column:", newStatus);
     }
     // Eğer hedef başka bir kart ise, o kartın status'unu al
     else {
       const targetOrder = orders.find((o) => o.orderId === targetId);
       if (targetOrder) {
         newStatus = targetOrder.status;
-        console.log("🎯 Dropped on card, target status:", newStatus);
       }
     }
 
@@ -194,7 +162,6 @@ const Kanban: React.FC = () => {
     }
 
     if (draggedOrder.status === newStatus) {
-      console.log("ℹ️ Same status, no update needed");
       return;
     }
 
@@ -215,7 +182,6 @@ const Kanban: React.FC = () => {
         newStatus === OrderStatus.IptalEdildi) &&
       draggedOrder.workshopId
     ) {
-      console.log("💰 Opening cost modal for workshop exit");
       setPendingStatusChange({
         orderId: draggedOrderId,
         newStatus: newStatus,
@@ -250,11 +216,8 @@ const Kanban: React.FC = () => {
     try {
       // Backend'i güncelle
       const result = await orderService.updateStatus(orderId, newStatus);
-      console.log("✅ Status updated successfully", result);
-
       // Eğer Tamamlandı status'üne taşındıysa bildirim göster
       if (newStatus === OrderStatus.Tamamlandi) {
-        console.log("🎉 Order completed with date:", result.completionDate);
       }
     } catch (error: any) {
       console.error("❌ Failed to update status:", error);
@@ -297,12 +260,9 @@ const Kanban: React.FC = () => {
 
     try {
       // Önce maliyetleri kaydet
-      console.log("💾 Saving workshop costs:", costs.length);
       for (const cost of costs) {
         await costService.addOrderWorkshopCost(cost);
       }
-      console.log("✅ All costs saved successfully");
-
       // Sonra status'ü güncelle
       await updateOrderStatus(
         pendingStatusChange.orderId,
@@ -322,7 +282,6 @@ const Kanban: React.FC = () => {
 
   // Modal iptal edildiğinde
   const handleCostsCancel = () => {
-    console.log("❌ Cost modal cancelled");
     setCostModalOpen(false);
     setPendingStatusChange(null);
   };

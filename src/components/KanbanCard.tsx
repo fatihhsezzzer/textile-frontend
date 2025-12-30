@@ -38,13 +38,11 @@ const KanbanCard: React.FC<KanbanCardProps> = ({
     return "low";
   };
 
-  // Toplam işlem süresini hesapla (createdAt - completionDate)
+  // Firmada geçen süreyi hesapla (kabul tarihi - şu anki tarih)
   const calculateTotalDuration = () => {
-    if (!order.completionDate) return null;
-
-    const created = new Date(order.createdAt);
-    const completed = new Date(order.completionDate);
-    const diffTime = Math.abs(completed.getTime() - created.getTime());
+    const acceptanceDate = new Date(order.acceptanceDate);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - acceptanceDate.getTime());
 
     const totalHours = Math.floor(diffTime / (1000 * 60 * 60));
     const days = Math.floor(totalHours / 24);
@@ -57,7 +55,7 @@ const KanbanCard: React.FC<KanbanCardProps> = ({
     } else if (hours > 0) {
       return `${hours} saat`;
     } else {
-      return "1 saat";
+      return "< 1 saat";
     }
   };
 
@@ -129,13 +127,11 @@ const KanbanCard: React.FC<KanbanCardProps> = ({
             </div>
           )}
 
-          {calculateTotalDuration() && (
-            <div className="card-detail-row">
-              <span className="process-duration">
-                ⏱️ Firmada geçen süre: {calculateTotalDuration()}
-              </span>
-            </div>
-          )}
+          <div className="card-detail-row">
+            <span className="process-duration">
+              ⏱️ Firmada geçen süre: {calculateTotalDuration()}
+            </span>
+          </div>
 
           {workshopDuration && (
             <div className="card-detail-row">

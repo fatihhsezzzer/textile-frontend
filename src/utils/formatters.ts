@@ -39,3 +39,30 @@ export const formatNumber = (
     maximumFractionDigits: maxDecimals,
   }).format(value);
 };
+
+/**
+ * Normalizes Turkish characters for case-insensitive search
+ * Converts both Turkish and English characters to lowercase equivalents
+ * @param text - The text to normalize
+ * @returns Normalized lowercase text
+ */
+export const normalizeTurkish = (text: string): string => {
+  return text
+    .toLowerCase()
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ı/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c");
+};
+
+/**
+ * Checks if text contains search term (case-insensitive, Turkish character aware)
+ * @param text - The text to search in
+ * @param searchTerm - The search term
+ * @returns True if text contains search term
+ */
+export const turkishIncludes = (text: string, searchTerm: string): boolean => {
+  return normalizeTurkish(text).includes(normalizeTurkish(searchTerm));
+};

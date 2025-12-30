@@ -6,45 +6,87 @@ import {
   modelService,
   firmService,
 } from "../services/dataService";
-import { formatCurrency, formatNumber } from "../utils/formatters";
+import {
+  formatCurrency,
+  formatNumber,
+  turkishIncludes,
+} from "../utils/formatters";
 import "./CostManagement.css";
 
 const ModelCosts: React.FC = () => {
-  const { modelId } = useParams<{ modelId: string }>();
+  const { modelId, firmId } = useParams<{
+    modelId?: string;
+    firmId?: string;
+  }>();
   const navigate = useNavigate();
 
+  // State
+  const [firms, setFirms] = useState<Firm[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
   const [model, setModel] = useState<Model | null>(null);
   const [modelCosts, setModelCosts] = useState<ModelCost[]>([]);
-  const [firms, setFirms] = useState<Firm[]>([]);
-  const [selectedFirmId, setSelectedFirmId] = useState<string>("all");
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<ModelCost | null>(null);
+  const [firmSearchTerm, setFirmSearchTerm] = useState("");
+  const [modelSearchTerm, setModelSearchTerm] = useState("");
 
   useEffect(() => {
     if (modelId) {
+      // Model detayı görünümü
       loadModel();
       loadModelCosts();
+    } else if (firmId) {
+      // Firma modelleri görünümü
+      loadFirmModels();
+    } else {
+      // Firma listesi görünümü
       loadFirms();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelId]);
+  }, [modelId, firmId]);
 
   const loadFirms = async () => {
     try {
+      setLoading(true);
       const data = await firmService.getFirms();
       setFirms(data);
     } catch (error) {
       console.error("❌ Failed to load firms:", error);
-      setFirms([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadFirmModels = async () => {
+    if (!firmId) return;
+    try {
+      setLoading(true);
+      const [allModels, allFirms] = await Promise.all([
+        modelService.getAll(),
+        firmService.getFirms(),
+      ]);
+      const firmModels = allModels.filter((m) => m.firmId === firmId);
+      setModels(firmModels);
+      setFirms(allFirms);
+    } catch (error) {
+      console.error("❌ Failed to load firm models:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadModel = async () => {
     if (!modelId) return;
     try {
-      const data = await modelService.getAll();
-      const found = data.find((m) => m.modelId === modelId);
+      const [allModels, allFirms] = await Promise.all([
+        modelService.getAll(),
+        firmService.getFirms(),
+      ]);
+      const found = allModels.find((m) => m.modelId === modelId);
       setModel(found || null);
+      setFirms(allFirms);
     } catch (error) {
       console.error("❌ Failed to load model:", error);
     }
@@ -54,19 +96,9 @@ const ModelCosts: React.FC = () => {
     if (!modelId) return;
     try {
       setLoading(true);
-      console.log("📊 Loading model costs for modelId:", modelId);
       const data = await costService.getModelCosts(modelId);
-      console.log("✅ Model costs loaded:", data.length, "items");
-      console.log("📦 Full response data:", data);
-
       // İlk kayıttaki firma bilgisini kontrol et
       if (data.length > 0) {
-        console.log("🏢 First item firm info:", {
-          firmId: data[0].firmId,
-          firmName: data[0].firmName,
-          orderFirmId: data[0].order?.firmId,
-          orderFirmName: data[0].order?.firm?.firmName,
-        });
       }
 
       setModelCosts(data);
@@ -114,6 +146,27 @@ const ModelCosts: React.FC = () => {
     }
   };
 
+  const handleEdit = (item: ModelCost) => {
+    setEditingItem(item);
+    setShowEditModal(true);
+  };
+
+  const handleUpdateModelCost = async (updatedItem: ModelCost) => {
+    try {
+      setLoading(true);
+      await costService.updateModelCost(updatedItem.modelCostId, updatedItem);
+      alert("Model maliyeti başarıyla güncellendi!");
+      setShowEditModal(false);
+      setEditingItem(null);
+      loadModelCosts();
+    } catch (error: any) {
+      console.error("❌ Failed to update model cost:", error);
+      alert("Model maliyeti güncellenemedi!");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Döviz dönüşümü fonksiyonu
   const convertToTRY = (
     amount: number,
@@ -148,35 +201,11 @@ const ModelCosts: React.FC = () => {
     }
   };
 
-  // Firma filtreleme
-  const getFilteredCosts = (): ModelCost[] => {
-    if (selectedFirmId === "all") {
-      return modelCosts;
-    }
-    return modelCosts.filter(
-      (cost) =>
-        cost.firmId === selectedFirmId || cost.order?.firmId === selectedFirmId
-    );
-  };
-
-  // Maliyetlerde bulunan firmaları getir
-  const getAvailableFirms = (): Firm[] => {
-    const firmIdsInCosts = new Set<string>();
-    modelCosts.forEach((cost) => {
-      const firmId = cost.firmId || cost.order?.firmId;
-      if (firmId) {
-        firmIdsInCosts.add(firmId);
-      }
-    });
-    return firms.filter((firm) => firmIdsInCosts.has(firm.firmId));
-  };
-
   // Order'lara göre grupla
   const groupByOrder = () => {
     const grouped = new Map<string, ModelCost[]>();
-    const filteredCosts = getFilteredCosts();
 
-    filteredCosts.forEach((cost) => {
+    modelCosts.forEach((cost) => {
       const orderKey = cost.orderId || "general";
       if (!grouped.has(orderKey)) {
         grouped.set(orderKey, []);
@@ -200,10 +229,6 @@ const ModelCosts: React.FC = () => {
     }, 0);
   };
 
-  const calculateTotalCost = (): number => {
-    return calculateGroupTotal(getFilteredCosts());
-  };
-
   const toggleOrderExpanded = (orderKey: string) => {
     const newExpanded = new Set(expandedOrders);
     if (newExpanded.has(orderKey)) {
@@ -225,6 +250,624 @@ const ModelCosts: React.FC = () => {
     }
   };
 
+  // ============================================
+  // RENDER: Firma Listesi Görünümü
+  // ============================================
+  if (!firmId && !modelId) {
+    if (loading) {
+      return (
+        <div className="cost-management-container">
+          <div className="loading">Yükleniyor...</div>
+        </div>
+      );
+    }
+
+    const filteredFirms = firms.filter(
+      (firm) =>
+        turkishIncludes(firm.firmName, firmSearchTerm) ||
+        turkishIncludes(firm.firmCode, firmSearchTerm) ||
+        turkishIncludes(firm.contactPerson || "", firmSearchTerm) ||
+        turkishIncludes(firm.phone || "", firmSearchTerm) ||
+        turkishIncludes(firm.email || "", firmSearchTerm)
+    );
+
+    return (
+      <div className="cost-management-container">
+        <div className="cost-management-header">
+          <div className="header-content">
+            <h1
+              style={{
+                margin: 0,
+                fontSize: "28px",
+                fontWeight: "700",
+                color: "#1a1a1a",
+              }}
+            >
+              Firma Bazlı Model Maliyetleri
+            </h1>
+            <p
+              style={{
+                margin: "8px 0 0",
+                fontSize: "14px",
+                color: "#666",
+              }}
+            >
+              Firma seçerek modellere ulaşın ({filteredFirms.length}/
+              {firms.length} firma)
+            </p>
+          </div>
+        </div>
+
+        <div style={{ padding: "24px" }}>
+          {/* Arama */}
+          <div
+            style={{
+              marginBottom: "20px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ position: "relative", width: "400px" }}>
+              <input
+                type="text"
+                placeholder="Firma ara... (kod, ad, iletişim)"
+                value={firmSearchTerm}
+                onChange={(e) => setFirmSearchTerm(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px 12px 42px",
+                  fontSize: "14px",
+                  border: "2px solid #e0e0e0",
+                  borderRadius: "8px",
+                  outline: "none",
+                  transition: "border-color 0.2s ease",
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "#667eea")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "#e0e0e0")}
+              />
+              <svg
+                style={{
+                  position: "absolute",
+                  left: "14px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                }}
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#999"
+                strokeWidth="2"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+            </div>
+          </div>
+          <div
+            style={{
+              background: "white",
+              borderRadius: "12px",
+              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+              overflow: "hidden",
+            }}
+          >
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+              }}
+            >
+              <thead>
+                <tr
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    color: "white",
+                  }}
+                >
+                  <th
+                    style={{
+                      padding: "16px",
+                      textAlign: "left",
+                      fontWeight: "600",
+                      fontSize: "14px",
+                    }}
+                  >
+                    Firma Kodu
+                  </th>
+                  <th
+                    style={{
+                      padding: "16px",
+                      textAlign: "left",
+                      fontWeight: "600",
+                      fontSize: "14px",
+                    }}
+                  >
+                    Firma Adı
+                  </th>
+                  <th
+                    style={{
+                      padding: "16px",
+                      textAlign: "left",
+                      fontWeight: "600",
+                      fontSize: "14px",
+                    }}
+                  >
+                    İletişim
+                  </th>
+                  <th
+                    style={{
+                      padding: "16px",
+                      textAlign: "right",
+                      fontWeight: "600",
+                      fontSize: "14px",
+                    }}
+                  >
+                    İşlem
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredFirms.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      style={{
+                        padding: "40px",
+                        textAlign: "center",
+                        color: "#666",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Arama kriterlerine uygun firma bulunamadı.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredFirms.map((firm, index) => (
+                    <tr
+                      key={firm.firmId}
+                      onClick={() =>
+                        navigate(`/model-costs/firm/${firm.firmId}`)
+                      }
+                      style={{
+                        cursor: "pointer",
+                        background: index % 2 === 0 ? "white" : "#f9fafb",
+                        transition: "background-color 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#f0f4ff";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background =
+                          index % 2 === 0 ? "white" : "#f9fafb";
+                      }}
+                    >
+                      <td
+                        style={{
+                          padding: "16px",
+                          borderTop: "1px solid #e8e8e8",
+                          fontSize: "14px",
+                          color: "#666",
+                          fontWeight: "500",
+                        }}
+                      >
+                        {firm.firmCode}
+                      </td>
+                      <td
+                        style={{
+                          padding: "16px",
+                          borderTop: "1px solid #e8e8e8",
+                          fontSize: "15px",
+                          color: "#1a1a1a",
+                          fontWeight: "600",
+                        }}
+                      >
+                        {firm.firmName}
+                      </td>
+                      <td
+                        style={{
+                          padding: "16px",
+                          borderTop: "1px solid #e8e8e8",
+                          fontSize: "13px",
+                          color: "#666",
+                        }}
+                      >
+                        {firm.phone || firm.email || "-"}
+                      </td>
+                      <td
+                        style={{
+                          padding: "16px",
+                          borderTop: "1px solid #e8e8e8",
+                          textAlign: "right",
+                        }}
+                      >
+                        <button
+                          style={{
+                            padding: "8px 16px",
+                            background: "#667eea",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "6px",
+                            fontSize: "13px",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = "#5568d3";
+                            e.currentTarget.style.transform =
+                              "translateY(-1px)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "#667eea";
+                            e.currentTarget.style.transform = "translateY(0)";
+                          }}
+                        >
+                          Modelleri Gör →
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================
+  // RENDER: Firma Modelleri Görünümü
+  // ============================================
+  if (firmId && !modelId) {
+    if (loading) {
+      return (
+        <div className="cost-management-container">
+          <div className="loading">Yükleniyor...</div>
+        </div>
+      );
+    }
+
+    const currentFirm = firms.find((f) => f.firmId === firmId);
+
+    return (
+      <div className="cost-management-container">
+        <div className="cost-management-header">
+          <div className="header-content">
+            {/* Breadcrumb */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "13px",
+                color: "#666",
+                marginBottom: "16px",
+              }}
+            >
+              <span
+                onClick={() => navigate("/model-costs")}
+                style={{
+                  cursor: "pointer",
+                  color: "#667eea",
+                  fontWeight: "500",
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.textDecoration = "underline")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.textDecoration = "none")
+                }
+              >
+                Firmalar
+              </span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#999">
+                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+              </svg>
+              <span style={{ color: "#333", fontWeight: "500" }}>
+                {currentFirm?.firmName || "Firma"}
+              </span>
+            </div>
+
+            <h1
+              style={{
+                margin: 0,
+                fontSize: "28px",
+                fontWeight: "700",
+                color: "#1a1a1a",
+              }}
+            >
+              📦 {currentFirm?.firmName} - Modeller
+            </h1>
+            <p
+              style={{
+                margin: "8px 0 0",
+                fontSize: "14px",
+                color: "#666",
+              }}
+            >
+              Model seçerek maliyet detaylarına ulaşın ({models.length} model)
+            </p>
+          </div>
+        </div>
+
+        <div style={{ padding: "24px" }}>
+          {/* Arama */}
+          <div
+            style={{
+              marginBottom: "20px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ position: "relative", width: "400px" }}>
+              <input
+                type="text"
+                placeholder="Model ara... (kod, ad, kategori, sezon)"
+                value={modelSearchTerm}
+                onChange={(e) => setModelSearchTerm(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px 12px 42px",
+                  fontSize: "14px",
+                  border: "2px solid #e0e0e0",
+                  borderRadius: "8px",
+                  outline: "none",
+                  transition: "border-color 0.2s ease",
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "#667eea")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "#e0e0e0")}
+              />
+              <svg
+                style={{
+                  position: "absolute",
+                  left: "14px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                }}
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#999"
+                strokeWidth="2"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+            </div>
+          </div>
+          {models.length === 0 ? (
+            <div
+              style={{
+                background: "white",
+                borderRadius: "12px",
+                padding: "40px",
+                textAlign: "center",
+                color: "#666",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+              }}
+            >
+              Bu firmaya ait model bulunmuyor.
+            </div>
+          ) : (
+            (() => {
+              const filteredModels = models.filter(
+                (model) =>
+                  turkishIncludes(model.modelName, modelSearchTerm) ||
+                  turkishIncludes(model.modelCode, modelSearchTerm) ||
+                  turkishIncludes(model.category || "", modelSearchTerm) ||
+                  turkishIncludes(model.season || "", modelSearchTerm)
+              );
+
+              return (
+                <div
+                  style={{
+                    background: "white",
+                    borderRadius: "12px",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                    }}
+                  >
+                    <thead>
+                      <tr
+                        style={{
+                          background:
+                            "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                          color: "white",
+                        }}
+                      >
+                        <th
+                          style={{
+                            padding: "16px",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            fontSize: "14px",
+                          }}
+                        >
+                          Model Kodu
+                        </th>
+                        <th
+                          style={{
+                            padding: "16px",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            fontSize: "14px",
+                          }}
+                        >
+                          Model Adı
+                        </th>
+                        <th
+                          style={{
+                            padding: "16px",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            fontSize: "14px",
+                          }}
+                        >
+                          Kategori
+                        </th>
+                        <th
+                          style={{
+                            padding: "16px",
+                            textAlign: "left",
+                            fontWeight: "600",
+                            fontSize: "14px",
+                          }}
+                        >
+                          Sezon
+                        </th>
+                        <th
+                          style={{
+                            padding: "16px",
+                            textAlign: "right",
+                            fontWeight: "600",
+                            fontSize: "14px",
+                          }}
+                        >
+                          İşlem
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredModels.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            style={{
+                              padding: "40px",
+                              textAlign: "center",
+                              color: "#666",
+                              fontSize: "14px",
+                            }}
+                          >
+                            Arama kriterlerine uygun model bulunamadı.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredModels.map((model, index) => (
+                          <tr
+                            key={model.modelId}
+                            onClick={() =>
+                              navigate(`/model-costs/model/${model.modelId}`)
+                            }
+                            style={{
+                              cursor: "pointer",
+                              background: index % 2 === 0 ? "white" : "#f9fafb",
+                              transition: "background-color 0.2s ease",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "#f0f4ff";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background =
+                                index % 2 === 0 ? "white" : "#f9fafb";
+                            }}
+                          >
+                            <td
+                              style={{
+                                padding: "16px",
+                                borderTop: "1px solid #e8e8e8",
+                                fontSize: "14px",
+                                color: "#666",
+                                fontWeight: "500",
+                              }}
+                            >
+                              {model.modelCode}
+                            </td>
+                            <td
+                              style={{
+                                padding: "16px",
+                                borderTop: "1px solid #e8e8e8",
+                                fontSize: "15px",
+                                color: "#1a1a1a",
+                                fontWeight: "600",
+                              }}
+                            >
+                              👔 {model.modelName}
+                            </td>
+                            <td
+                              style={{
+                                padding: "16px",
+                                borderTop: "1px solid #e8e8e8",
+                                fontSize: "13px",
+                                color: "#666",
+                              }}
+                            >
+                              {model.category || "-"}
+                            </td>
+                            <td
+                              style={{
+                                padding: "16px",
+                                borderTop: "1px solid #e8e8e8",
+                                fontSize: "13px",
+                                color: "#666",
+                              }}
+                            >
+                              {model.season || "-"}
+                            </td>
+                            <td
+                              style={{
+                                padding: "16px",
+                                borderTop: "1px solid #e8e8e8",
+                                textAlign: "right",
+                              }}
+                            >
+                              <button
+                                style={{
+                                  padding: "8px 16px",
+                                  background: "#667eea",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "6px",
+                                  fontSize: "13px",
+                                  fontWeight: "600",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s ease",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = "#5568d3";
+                                  e.currentTarget.style.transform =
+                                    "translateY(-1px)";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = "#667eea";
+                                  e.currentTarget.style.transform =
+                                    "translateY(0)";
+                                }}
+                              >
+                                Maliyetleri Gör →
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================
+  // RENDER: Model Detayı ve Maliyetler
+  // ============================================
   if (loading && modelCosts.length === 0) {
     return (
       <div className="cost-management-container">
@@ -234,35 +877,71 @@ const ModelCosts: React.FC = () => {
   }
 
   if (!loading && modelCosts.length === 0 && modelId) {
+    const modelFirmId = model?.firmId;
+    const currentFirm = firms.find((f) => f.firmId === modelFirmId);
+
     return (
       <div className="cost-management-container">
         <div className="cost-management-header">
           <div className="header-content">
-            <button
-              className="back-button"
-              onClick={() => navigate("/models")}
+            {/* Breadcrumb */}
+            <div
               style={{
-                background: "none",
-                border: "1px solid #e0e0e0",
-                padding: "8px 16px",
-                borderRadius: "6px",
-                cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
+                fontSize: "13px",
+                color: "#666",
                 marginBottom: "16px",
               }}
             >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="currentColor"
+              <span
+                onClick={() => navigate("/model-costs")}
+                style={{
+                  cursor: "pointer",
+                  color: "#667eea",
+                  fontWeight: "500",
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.textDecoration = "underline")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.textDecoration = "none")
+                }
               >
-                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2z" />
+                Firmalar
+              </span>
+              {modelFirmId && (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#999">
+                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                  </svg>
+                  <span
+                    onClick={() => navigate(`/model-costs/firm/${modelFirmId}`)}
+                    style={{
+                      cursor: "pointer",
+                      color: "#667eea",
+                      fontWeight: "500",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.textDecoration = "underline")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.textDecoration = "none")
+                    }
+                  >
+                    {currentFirm?.firmName || "Firma"}
+                  </span>
+                </>
+              )}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#999">
+                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
               </svg>
-              Geri
-            </button>
+              <span style={{ color: "#333", fontWeight: "500" }}>
+                {model?.modelName || "Model"}
+              </span>
+            </div>
+
             <h1>{model?.modelName || "Model"} - Maliyet Yönetimi</h1>
           </div>
         </div>
@@ -293,7 +972,7 @@ const ModelCosts: React.FC = () => {
             }}
           >
             <span
-              onClick={() => navigate("/models")}
+              onClick={() => navigate("/model-costs")}
               style={{
                 cursor: "pointer",
                 color: "#667eea",
@@ -306,8 +985,32 @@ const ModelCosts: React.FC = () => {
                 (e.currentTarget.style.textDecoration = "none")
               }
             >
-              Modeller
+              Firmalar
             </span>
+            {model?.firmId && (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#999">
+                  <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                </svg>
+                <span
+                  onClick={() => navigate(`/model-costs/firm/${model.firmId}`)}
+                  style={{
+                    cursor: "pointer",
+                    color: "#667eea",
+                    fontWeight: "500",
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.textDecoration = "underline")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.textDecoration = "none")
+                  }
+                >
+                  {firms.find((f) => f.firmId === model.firmId)?.firmName ||
+                    "Firma"}
+                </span>
+              </>
+            )}
             <svg width="16" height="16" viewBox="0 0 24 24" fill="#999">
               <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
             </svg>
@@ -315,162 +1018,6 @@ const ModelCosts: React.FC = () => {
               {model?.modelName || "Model"}
             </span>
           </div>
-
-          {/* Page Title */}
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div
-              style={{
-                width: "48px",
-                height: "48px",
-                borderRadius: "12px",
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
-              }}
-            >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="white"
-                strokeWidth="2"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 6v6l4 2" />
-              </svg>
-            </div>
-            <div>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: "28px",
-                  fontWeight: "700",
-                  color: "#1a1a1a",
-                  letterSpacing: "-0.5px",
-                }}
-              >
-                {model?.modelName || "Model"}
-              </h1>
-              <p
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "14px",
-                  color: "#666",
-                  fontWeight: "400",
-                }}
-              >
-                Maliyet Analizi ve Sipariş Detayları
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* Firma Filtresi - Profesyonel Görünüm */}
-      <div
-        style={{
-          marginTop: "24px",
-          marginBottom: "24px",
-          background: "white",
-          padding: "20px 24px",
-          borderRadius: "12px",
-          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
-          border: "1px solid #e8e8e8",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "16px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              minWidth: "140px",
-            }}
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#667eea"
-              strokeWidth="2"
-            >
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-            <label
-              style={{
-                fontWeight: "600",
-                fontSize: "14px",
-                color: "#333",
-              }}
-            >
-              Firma Filtresi
-            </label>
-          </div>
-          <select
-            value={selectedFirmId}
-            onChange={(e) => setSelectedFirmId(e.target.value)}
-            style={{
-              flex: 1,
-              padding: "10px 14px",
-              border: "2px solid #e0e0e0",
-              borderRadius: "8px",
-              fontSize: "14px",
-              cursor: "pointer",
-              background: "white",
-              fontWeight: "500",
-              color: "#333",
-              transition: "all 0.2s ease",
-            }}
-          >
-            <option value="all">Tüm Firmalar</option>
-            {getAvailableFirms()
-              .sort((a, b) => a.firmName.localeCompare(b.firmName))
-              .map((firm) => (
-                <option key={firm.firmId} value={firm.firmId}>
-                  {firm.firmName}
-                </option>
-              ))}
-          </select>
-          {selectedFirmId !== "all" && (
-            <button
-              onClick={() => setSelectedFirmId("all")}
-              style={{
-                padding: "10px 20px",
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                cursor: "pointer",
-                fontSize: "13px",
-                fontWeight: "600",
-                boxShadow: "0 2px 8px rgba(102, 126, 234, 0.3)",
-                transition: "all 0.2s ease",
-                whiteSpace: "nowrap",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.boxShadow =
-                  "0 4px 12px rgba(102, 126, 234, 0.4)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow =
-                  "0 2px 8px rgba(102, 126, 234, 0.3)";
-              }}
-            >
-              ✕ Filtreyi Temizle
-            </button>
-          )}
         </div>
       </div>
       {/* Order Bazlı Gruplama */}
@@ -549,22 +1096,9 @@ const ModelCosts: React.FC = () => {
           const orderQuantity = orderInfo?.quantity || 0;
           const unitCost = orderQuantity > 0 ? groupTotal / orderQuantity : 0;
 
-          // Firma bilgisini bul - önce direkt firmName'e bak, sonra order.firm'e
+          // Debug: orderInfo'yu konsola bas
+          // Debug: Kur bilgisini kontrol et
           const firstCost = costs[0];
-          const firmName = firstCost?.firmName || orderInfo?.firm?.firmName;
-          const firmInfo = firmName
-            ? { firmName }
-            : firms.find(
-                (f) => f.firmId === (firstCost?.firmId || orderInfo?.firmId)
-              );
-
-          // Debug: Firma bilgisini logla
-          console.log(`📊 Order ${orderKey.slice(0, 8)} - Firma Info:`, {
-            firstCostFirmName: firstCost?.firmName,
-            orderInfoFirmName: orderInfo?.firm?.firmName,
-            calculatedFirmName: firmName,
-            firmInfo: firmInfo,
-          });
 
           return (
             <div
@@ -653,61 +1187,10 @@ const ModelCosts: React.FC = () => {
                     >
                       {orderKey === "general"
                         ? "🏭 Genel Model Maliyetleri"
-                        : `📦 Sipariş #${orderKey.slice(0, 8)}`}
-                      {firmInfo && (
-                        <span
-                          style={{
-                            marginLeft: "12px",
-                            fontSize: "14px",
-                            color: expandedOrders.has(orderKey)
-                              ? "#e0e7ff"
-                              : "#6366f1",
-                            fontWeight: "500",
-                          }}
-                        >
-                          ({firmInfo.firmName})
-                        </span>
-                      )}
+                        : `📦 Sipariş #${orderKey}`}
                     </h3>
                     {orderInfo && (
                       <>
-                        <p
-                          style={{
-                            margin: "8px 0 4px",
-                            opacity: 0.95,
-                            fontSize: "15px",
-                            fontWeight: "700",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                          }}
-                        >
-                          <span
-                            style={{
-                              background: expandedOrders.has(orderKey)
-                                ? "rgba(255, 255, 255, 0.3)"
-                                : "#dbeafe",
-                              color: expandedOrders.has(orderKey)
-                                ? "white"
-                                : "#1e3a8a",
-                              padding: "4px 12px",
-                              borderRadius: "6px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "6px",
-                            }}
-                          >
-                            <svg
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                            >
-                              <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z" />
-                            </svg>
-                            {firmInfo?.firmName || "Bilinmeyen Firma"}
-                          </span>
-                        </p>
                         <p
                           style={{
                             margin: "4px 0 0",
@@ -720,6 +1203,113 @@ const ModelCosts: React.FC = () => {
                         </p>
                       </>
                     )}
+                    {/* Sipariş Tarihi - exchangeRateDate'den al */}
+                    {firstCost?.exchangeRateDate && (
+                      <p
+                        style={{
+                          margin: "4px 0 0",
+                          opacity: 0.85,
+                          fontSize: "13px",
+                          fontWeight: "500",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <rect
+                            x="3"
+                            y="4"
+                            width="18"
+                            height="18"
+                            rx="2"
+                            ry="2"
+                          />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                        {new Date(
+                          firstCost.exchangeRateDate
+                        ).toLocaleDateString("tr-TR", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </p>
+                    )}
+                    {/* Döviz Kurları - orderInfo dışında */}
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        opacity: 0.85,
+                        fontSize: "12px",
+                        fontWeight: "500",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <line x1="12" y1="1" x2="12" y2="23" />
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                      </svg>
+                      <span>
+                        Kurlar{" "}
+                        {firstCost?.createdAt &&
+                          `(${new Date(firstCost.createdAt).toLocaleDateString(
+                            "tr-TR"
+                          )})`}
+                        :
+                      </span>
+                      <span
+                        style={{
+                          background: expandedOrders.has(orderKey)
+                            ? "rgba(255,255,255,0.2)"
+                            : "#e0f2fe",
+                          color: expandedOrders.has(orderKey)
+                            ? "white"
+                            : "#0369a1",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                        }}
+                      >
+                        USD: {firstCost?.usdRate?.toFixed(4) || "Yok"}
+                      </span>
+                      <span
+                        style={{
+                          background: expandedOrders.has(orderKey)
+                            ? "rgba(255,255,255,0.2)"
+                            : "#fef3c7",
+                          color: expandedOrders.has(orderKey)
+                            ? "white"
+                            : "#92400e",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                        }}
+                      >
+                        EUR: {firstCost?.eurRate?.toFixed(4) || "Yok"}
+                      </span>
+                    </p>
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>
@@ -1149,20 +1739,105 @@ const ModelCosts: React.FC = () => {
                                 )}
                               </td>
                               <td>
-                                <div className="action-buttons">
+                                <div
+                                  className="action-buttons"
+                                  style={{
+                                    display: "flex",
+                                    gap: "8px",
+                                    justifyContent: "center",
+                                  }}
+                                >
                                   <button
-                                    className="delete-button"
-                                    onClick={() => handleDelete(item)}
-                                    title="Kaldır"
+                                    onClick={() => handleEdit(item)}
+                                    title="Düzenle"
                                     style={{
-                                      background: "#ffebee",
-                                      border: "1px solid #ffcdd2",
-                                      padding: "6px 12px",
-                                      borderRadius: "4px",
+                                      background:
+                                        "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                                      border: "none",
+                                      padding: "8px 14px",
+                                      borderRadius: "6px",
                                       cursor: "pointer",
+                                      color: "white",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      fontSize: "13px",
+                                      fontWeight: "600",
+                                      boxShadow:
+                                        "0 2px 8px rgba(102, 126, 234, 0.3)",
+                                      transition: "all 0.2s ease",
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.transform =
+                                        "translateY(-2px)";
+                                      e.currentTarget.style.boxShadow =
+                                        "0 4px 12px rgba(102, 126, 234, 0.4)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.transform =
+                                        "translateY(0)";
+                                      e.currentTarget.style.boxShadow =
+                                        "0 2px 8px rgba(102, 126, 234, 0.3)";
                                     }}
                                   >
-                                    🗑️
+                                    <svg
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    >
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                    Düzenle
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(item)}
+                                    title="Sil"
+                                    style={{
+                                      background:
+                                        "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+                                      border: "none",
+                                      padding: "8px 14px",
+                                      borderRadius: "6px",
+                                      cursor: "pointer",
+                                      color: "white",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      fontSize: "13px",
+                                      fontWeight: "600",
+                                      boxShadow:
+                                        "0 2px 8px rgba(245, 87, 108, 0.3)",
+                                      transition: "all 0.2s ease",
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.transform =
+                                        "translateY(-2px)";
+                                      e.currentTarget.style.boxShadow =
+                                        "0 4px 12px rgba(245, 87, 108, 0.4)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.transform =
+                                        "translateY(0)";
+                                      e.currentTarget.style.boxShadow =
+                                        "0 2px 8px rgba(245, 87, 108, 0.3)";
+                                    }}
+                                  >
+                                    <svg
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    >
+                                      <polyline points="3 6 5 6 21 6" />
+                                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                    </svg>
+                                    Sil
                                   </button>
                                 </div>
                               </td>
@@ -1186,6 +1861,489 @@ const ModelCosts: React.FC = () => {
           </p>
         </div>
       )}
+
+      {/* Edit Modal */}
+      {showEditModal && editingItem && (
+        <EditModelCostModal
+          item={editingItem}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingItem(null);
+          }}
+          onSave={handleUpdateModelCost}
+        />
+      )}
+    </div>
+  );
+};
+
+// Edit Modal Component
+interface EditModalProps {
+  item: ModelCost;
+  onClose: () => void;
+  onSave: (item: ModelCost) => void;
+}
+
+const EditModelCostModal: React.FC<EditModalProps> = ({
+  item,
+  onClose,
+  onSave,
+}) => {
+  const [formData, setFormData] = useState<ModelCost>(item);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  const handleChange = (field: keyof ModelCost, value: any) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div
+      className="modal-overlay"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "rgba(0, 0, 0, 0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div
+        className="modal-content"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: "600px",
+          width: "90%",
+          maxHeight: "90vh",
+          overflowY: "auto",
+          background: "white",
+          borderRadius: "16px",
+          boxShadow: "0 10px 40px rgba(0, 0, 0, 0.2)",
+        }}
+      >
+        <div
+          className="modal-header"
+          style={{
+            padding: "24px",
+            borderBottom: "1px solid #e8e8e8",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "20px",
+              fontWeight: "600",
+              color: "#1a1a1a",
+            }}
+          >
+            Miktar Düzenle
+          </h2>
+          <button
+            className="modal-close"
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: "28px",
+              cursor: "pointer",
+              color: "#999",
+              lineHeight: "1",
+              padding: "0",
+              width: "32px",
+              height: "32px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "6px",
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#f5f5f5";
+              e.currentTarget.style.color = "#333";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "none";
+              e.currentTarget.style.color = "#999";
+            }}
+          >
+            ×
+          </button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div
+            className="modal-body"
+            style={{
+              padding: "24px",
+            }}
+          >
+            {/* Maliyet Kalemi Bilgisi - Sadece Gösterim */}
+            <div
+              style={{
+                background: "#f8f9fa",
+                padding: "16px",
+                borderRadius: "8px",
+                marginBottom: "24px",
+                border: "1px solid #e9ecef",
+              }}
+            >
+              <div style={{ marginBottom: "8px" }}>
+                <span
+                  style={{ fontSize: "13px", color: "#666", fontWeight: "500" }}
+                >
+                  Maliyet Kalemi:
+                </span>
+                <span
+                  style={{
+                    marginLeft: "8px",
+                    fontSize: "14px",
+                    color: "#1a1a1a",
+                    fontWeight: "600",
+                  }}
+                >
+                  {formData.costItemName}
+                </span>
+              </div>
+              <div style={{ marginBottom: "8px" }}>
+                <span
+                  style={{ fontSize: "13px", color: "#666", fontWeight: "500" }}
+                >
+                  Kategori:
+                </span>
+                <span
+                  style={{
+                    marginLeft: "8px",
+                    fontSize: "14px",
+                    color: "#1a1a1a",
+                  }}
+                >
+                  {formData.costCategoryName}
+                </span>
+              </div>
+              <div>
+                <span
+                  style={{ fontSize: "13px", color: "#666", fontWeight: "500" }}
+                >
+                  Birim Fiyat:
+                </span>
+                <span
+                  style={{
+                    marginLeft: "8px",
+                    fontSize: "14px",
+                    color: "#1a1a1a",
+                    fontWeight: "600",
+                  }}
+                >
+                  {formData.unitPrice} {formData.currency}
+                </span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "16px",
+              }}
+            >
+              {/* Quantity 1 - Always shown */}
+              <div className="form-group">
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    color: "#333",
+                  }}
+                >
+                  Miktar *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.quantity || ""}
+                  onChange={(e) =>
+                    handleChange("quantity", parseFloat(e.target.value) || 0)
+                  }
+                  required
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    fontSize: "14px",
+                    border: "2px solid #e0e0e0",
+                    borderRadius: "8px",
+                    outline: "none",
+                    transition: "border-color 0.2s ease",
+                  }}
+                  onFocus={(e) =>
+                    (e.currentTarget.style.borderColor = "#667eea")
+                  }
+                  onBlur={(e) =>
+                    (e.currentTarget.style.borderColor = "#e0e0e0")
+                  }
+                />
+              </div>
+              <div className="form-group">
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "8px",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    color: "#333",
+                  }}
+                >
+                  Birim
+                </label>
+                <input
+                  type="text"
+                  value={formData.unit || ""}
+                  readOnly
+                  disabled
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    fontSize: "14px",
+                    border: "2px solid #e8e8e8",
+                    borderRadius: "8px",
+                    background: "#f5f5f5",
+                    color: "#999",
+                    cursor: "not-allowed",
+                  }}
+                />
+              </div>
+
+              {/* Quantity 2 - Only if exists */}
+              {formData.quantity2 !== undefined &&
+                formData.quantity2 !== null && (
+                  <>
+                    <div className="form-group">
+                      <label
+                        style={{
+                          display: "block",
+                          marginBottom: "8px",
+                          fontSize: "14px",
+                          fontWeight: "500",
+                          color: "#333",
+                        }}
+                      >
+                        Miktar 2
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.quantity2 || ""}
+                        onChange={(e) =>
+                          handleChange(
+                            "quantity2",
+                            parseFloat(e.target.value) || undefined
+                          )
+                        }
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          border: "2px solid #e0e0e0",
+                          borderRadius: "8px",
+                          outline: "none",
+                          transition: "border-color 0.2s ease",
+                        }}
+                        onFocus={(e) =>
+                          (e.currentTarget.style.borderColor = "#667eea")
+                        }
+                        onBlur={(e) =>
+                          (e.currentTarget.style.borderColor = "#e0e0e0")
+                        }
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label
+                        style={{
+                          display: "block",
+                          marginBottom: "8px",
+                          fontSize: "14px",
+                          fontWeight: "500",
+                          color: "#333",
+                        }}
+                      >
+                        Birim 2
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.unit2 || ""}
+                        readOnly
+                        disabled
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          border: "2px solid #e8e8e8",
+                          borderRadius: "8px",
+                          background: "#f5f5f5",
+                          color: "#999",
+                          cursor: "not-allowed",
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
+
+              {/* Quantity 3 - Only if exists */}
+              {formData.quantity3 !== undefined &&
+                formData.quantity3 !== null && (
+                  <>
+                    <div className="form-group">
+                      <label
+                        style={{
+                          display: "block",
+                          marginBottom: "8px",
+                          fontSize: "14px",
+                          fontWeight: "500",
+                          color: "#333",
+                        }}
+                      >
+                        Miktar 3 (Ref)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.quantity3 || ""}
+                        onChange={(e) =>
+                          handleChange(
+                            "quantity3",
+                            parseFloat(e.target.value) || undefined
+                          )
+                        }
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          border: "2px solid #e0e0e0",
+                          borderRadius: "8px",
+                          outline: "none",
+                          transition: "border-color 0.2s ease",
+                        }}
+                        onFocus={(e) =>
+                          (e.currentTarget.style.borderColor = "#667eea")
+                        }
+                        onBlur={(e) =>
+                          (e.currentTarget.style.borderColor = "#e0e0e0")
+                        }
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label
+                        style={{
+                          display: "block",
+                          marginBottom: "8px",
+                          fontSize: "14px",
+                          fontWeight: "500",
+                          color: "#333",
+                        }}
+                      >
+                        Birim 3 (Ref)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.unit3 || ""}
+                        readOnly
+                        disabled
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          fontSize: "14px",
+                          border: "2px solid #e8e8e8",
+                          borderRadius: "8px",
+                          background: "#f5f5f5",
+                          color: "#999",
+                          cursor: "not-allowed",
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
+            </div>
+          </div>
+          <div
+            className="modal-footer"
+            style={{
+              padding: "16px 24px",
+              borderTop: "1px solid #e8e8e8",
+              display: "flex",
+              gap: "12px",
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-secondary"
+              style={{
+                padding: "10px 24px",
+                fontSize: "14px",
+                fontWeight: "600",
+                border: "2px solid #e0e0e0",
+                background: "white",
+                color: "#666",
+                borderRadius: "8px",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "#999";
+                e.currentTarget.style.color = "#333";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "#e0e0e0";
+                e.currentTarget.style.color = "#666";
+              }}
+            >
+              İptal
+            </button>
+            <button
+              type="submit"
+              className="btn-primary"
+              style={{
+                padding: "10px 24px",
+                fontSize: "14px",
+                fontWeight: "600",
+                border: "none",
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                color: "white",
+                borderRadius: "8px",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                boxShadow: "0 4px 12px rgba(102, 126, 234, 0.3)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-2px)";
+                e.currentTarget.style.boxShadow =
+                  "0 6px 16px rgba(102, 126, 234, 0.4)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow =
+                  "0 4px 12px rgba(102, 126, 234, 0.3)";
+              }}
+            >
+              Kaydet
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

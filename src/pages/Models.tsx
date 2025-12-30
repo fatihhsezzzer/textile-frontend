@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Model } from "../types";
-import { modelService } from "../services/dataService";
+import { Model, Firm } from "../types";
+import { modelService, firmService } from "../services/dataService";
+import { turkishIncludes } from "../utils/formatters";
 import { useNavigate } from "react-router-dom";
 import PageLoader from "../components/PageLoader";
 import "./Models.css";
@@ -8,13 +9,14 @@ import "./Models.css";
 const Models: React.FC = () => {
   const navigate = useNavigate();
   const [models, setModels] = useState<Model[]>([]);
+  const [firms, setFirms] = useState<Firm[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [selectedSeason, setSelectedSeason] = useState<string>("all");
+  const [selectedFirmId, setSelectedFirmId] = useState<string>("all");
 
   useEffect(() => {
     loadModels();
+    loadFirms();
   }, []);
 
   const loadModels = async () => {
@@ -30,36 +32,47 @@ const Models: React.FC = () => {
     }
   };
 
-  // Benzersiz kategorileri ve sezonları al
-  const categories = Array.from(
-    new Set(models.map((m) => m.category).filter(Boolean))
-  ).sort();
-  const seasons = Array.from(
-    new Set(models.map((m) => m.season).filter(Boolean))
-  ).sort();
+  const loadFirms = async () => {
+    try {
+      const data = await firmService.getFirms();
+      setFirms(data);
+    } catch (error) {
+      console.error("❌ Failed to load firms:", error);
+    }
+  };
+
+  // Firma bilgisini bul
+  const getFirmName = (firmId?: string): string => {
+    if (!firmId) return "-";
+    const firm = firms.find((f) => f.firmId === firmId);
+    return firm?.firmName || "-";
+  };
+
+  // Maliyetlerde bulunan firmaları getir
+  const getAvailableFirms = (): Firm[] => {
+    const firmIdsInModels = new Set<string>();
+    models.forEach((model) => {
+      if (model.firmId) {
+        firmIdsInModels.add(model.firmId);
+      }
+    });
+    return firms.filter((firm) => firmIdsInModels.has(firm.firmId));
+  };
 
   const filteredModels = models.filter((model) => {
     const matchesSearch =
-      model.modelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      model.modelCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      model.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      model.season?.toLowerCase().includes(searchTerm.toLowerCase());
+      turkishIncludes(model.modelName, searchTerm) ||
+      turkishIncludes(model.modelCode, searchTerm) ||
+      turkishIncludes(getFirmName(model.firmId), searchTerm);
 
-    const matchesCategory =
-      selectedCategory === "all" || model.category === selectedCategory;
-    const matchesSeason =
-      selectedSeason === "all" || model.season === selectedSeason;
+    const matchesFirm =
+      selectedFirmId === "all" || model.firmId === selectedFirmId;
 
-    return matchesSearch && matchesCategory && matchesSeason;
+    return matchesSearch && matchesFirm;
   });
 
   // İstatistikler
   const totalModels = filteredModels.length;
-  const totalEstimatedValue = filteredModels.reduce(
-    (sum, model) => sum + (model.estimatedPrice || 0),
-    0
-  );
-  const averagePrice = totalModels > 0 ? totalEstimatedValue / totalModels : 0;
 
   if (loading && models.length === 0) {
     return <PageLoader message="Modeller yükleniyor..." />;
@@ -206,78 +219,6 @@ const Models: React.FC = () => {
                 {totalModels}
               </div>
             </div>
-
-            <div
-              style={{
-                background: "white",
-                padding: "20px 24px",
-                borderRadius: "12px",
-                minWidth: "180px",
-                border: "2px solid #e8e8e8",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "13px",
-                  color: "#666",
-                  fontWeight: "500",
-                  marginBottom: "6px",
-                }}
-              >
-                Ortalama Fiyat
-              </div>
-              <div
-                style={{
-                  fontSize: "24px",
-                  fontWeight: "700",
-                  color: "#667eea",
-                  letterSpacing: "-0.5px",
-                }}
-              >
-                {new Intl.NumberFormat("tr-TR", {
-                  style: "currency",
-                  currency: "TRY",
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
-                }).format(averagePrice)}
-              </div>
-            </div>
-
-            <div
-              style={{
-                background: "white",
-                padding: "20px 24px",
-                borderRadius: "12px",
-                minWidth: "180px",
-                border: "2px solid #e8e8e8",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "13px",
-                  color: "#666",
-                  fontWeight: "500",
-                  marginBottom: "6px",
-                }}
-              >
-                Toplam Değer
-              </div>
-              <div
-                style={{
-                  fontSize: "24px",
-                  fontWeight: "700",
-                  color: "#10b981",
-                  letterSpacing: "-0.5px",
-                }}
-              >
-                {new Intl.NumberFormat("tr-TR", {
-                  style: "currency",
-                  currency: "TRY",
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
-                }).format(totalEstimatedValue)}
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -324,7 +265,7 @@ const Models: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "2fr 1fr 1fr",
+            gridTemplateColumns: "2fr 1fr",
             gap: "16px",
           }}
         >
@@ -349,7 +290,7 @@ const Models: React.FC = () => {
             </svg>
             <input
               type="text"
-              placeholder="Model adı, kodu ile ara..."
+              placeholder="Model adı, kodu, firma ile ara..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -366,10 +307,10 @@ const Models: React.FC = () => {
             />
           </div>
 
-          {/* Category Filter */}
+          {/* Firm Filter */}
           <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
+            value={selectedFirmId}
+            onChange={(e) => setSelectedFirmId(e.target.value)}
             style={{
               padding: "12px 14px",
               border: "2px solid #e0e0e0",
@@ -382,43 +323,19 @@ const Models: React.FC = () => {
               transition: "all 0.2s ease",
             }}
           >
-            <option value="all">Tüm Kategoriler</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-
-          {/* Season Filter */}
-          <select
-            value={selectedSeason}
-            onChange={(e) => setSelectedSeason(e.target.value)}
-            style={{
-              padding: "12px 14px",
-              border: "2px solid #e0e0e0",
-              borderRadius: "8px",
-              fontSize: "14px",
-              fontWeight: "500",
-              color: "#333",
-              cursor: "pointer",
-              background: "white",
-              transition: "all 0.2s ease",
-            }}
-          >
-            <option value="all">Tüm Sezonlar</option>
-            {seasons.map((season) => (
-              <option key={season} value={season}>
-                {season}
-              </option>
-            ))}
+            <option value="all">Tüm Firmalar</option>
+            {getAvailableFirms()
+              .sort((a, b) => a.firmName.localeCompare(b.firmName))
+              .map((firm) => (
+                <option key={firm.firmId} value={firm.firmId}>
+                  {firm.firmName}
+                </option>
+              ))}
           </select>
         </div>
 
         {/* Active Filters */}
-        {(searchTerm ||
-          selectedCategory !== "all" ||
-          selectedSeason !== "all") && (
+        {(searchTerm || selectedFirmId !== "all") && (
           <div
             style={{
               marginTop: "16px",
@@ -458,7 +375,7 @@ const Models: React.FC = () => {
                 </button>
               </span>
             )}
-            {selectedCategory !== "all" && (
+            {selectedFirmId !== "all" && (
               <span
                 style={{
                   display: "inline-flex",
@@ -472,40 +389,9 @@ const Models: React.FC = () => {
                   fontWeight: "500",
                 }}
               >
-                Kategori: {selectedCategory}
+                Firma: {getFirmName(selectedFirmId)}
                 <button
-                  onClick={() => setSelectedCategory("all")}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#667eea",
-                    cursor: "pointer",
-                    padding: "0",
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
-                  ✕
-                </button>
-              </span>
-            )}
-            {selectedSeason !== "all" && (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "6px 12px",
-                  background: "#f0f4ff",
-                  color: "#667eea",
-                  borderRadius: "6px",
-                  fontSize: "13px",
-                  fontWeight: "500",
-                }}
-              >
-                Sezon: {selectedSeason}
-                <button
-                  onClick={() => setSelectedSeason("all")}
+                  onClick={() => setSelectedFirmId("all")}
                   style={{
                     background: "none",
                     border: "none",
@@ -584,7 +470,7 @@ const Models: React.FC = () => {
                   <th
                     style={{
                       padding: "16px 24px",
-                      textAlign: "center",
+                      textAlign: "left",
                       fontSize: "12px",
                       fontWeight: "700",
                       color: "#667eea",
@@ -592,59 +478,7 @@ const Models: React.FC = () => {
                       letterSpacing: "0.5px",
                     }}
                   >
-                    Kategori
-                  </th>
-                  <th
-                    style={{
-                      padding: "16px 24px",
-                      textAlign: "center",
-                      fontSize: "12px",
-                      fontWeight: "700",
-                      color: "#667eea",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    Sezon
-                  </th>
-                  <th
-                    style={{
-                      padding: "16px 24px",
-                      textAlign: "center",
-                      fontSize: "12px",
-                      fontWeight: "700",
-                      color: "#667eea",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    Renk
-                  </th>
-                  <th
-                    style={{
-                      padding: "16px 24px",
-                      textAlign: "center",
-                      fontSize: "12px",
-                      fontWeight: "700",
-                      color: "#667eea",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    Kumaş
-                  </th>
-                  <th
-                    style={{
-                      padding: "16px 24px",
-                      textAlign: "right",
-                      fontSize: "12px",
-                      fontWeight: "700",
-                      color: "#667eea",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    Tahmini Fiyat
+                    Firma
                   </th>
                   <th
                     style={{
@@ -712,10 +546,9 @@ const Models: React.FC = () => {
                     <td
                       style={{
                         padding: "20px 24px",
-                        textAlign: "center",
                       }}
                     >
-                      {model.category ? (
+                      {model.firmId ? (
                         <span
                           style={{
                             display: "inline-block",
@@ -727,76 +560,7 @@ const Models: React.FC = () => {
                             fontWeight: "600",
                           }}
                         >
-                          {model.category}
-                        </span>
-                      ) : (
-                        <span style={{ color: "#ccc" }}>—</span>
-                      )}
-                    </td>
-                    <td
-                      style={{
-                        padding: "20px 24px",
-                        textAlign: "center",
-                      }}
-                    >
-                      {model.season ? (
-                        <span
-                          style={{
-                            display: "inline-block",
-                            padding: "6px 12px",
-                            background: "#fff4e6",
-                            color: "#f59e0b",
-                            borderRadius: "6px",
-                            fontSize: "13px",
-                            fontWeight: "600",
-                          }}
-                        >
-                          {model.season}
-                        </span>
-                      ) : (
-                        <span style={{ color: "#ccc" }}>—</span>
-                      )}
-                    </td>
-                    <td
-                      style={{
-                        padding: "20px 24px",
-                        textAlign: "center",
-                        fontSize: "14px",
-                        color: "#666",
-                      }}
-                    >
-                      {model.color || "—"}
-                    </td>
-                    <td
-                      style={{
-                        padding: "20px 24px",
-                        textAlign: "center",
-                        fontSize: "14px",
-                        color: "#666",
-                      }}
-                    >
-                      {model.fabric || "—"}
-                    </td>
-                    <td
-                      style={{
-                        padding: "20px 24px",
-                        textAlign: "right",
-                      }}
-                    >
-                      {model.estimatedPrice ? (
-                        <span
-                          style={{
-                            fontSize: "16px",
-                            fontWeight: "700",
-                            color: "#10b981",
-                          }}
-                        >
-                          {new Intl.NumberFormat("tr-TR", {
-                            style: "currency",
-                            currency: "TRY",
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 0,
-                          }).format(model.estimatedPrice)}
+                          {getFirmName(model.firmId)}
                         </span>
                       ) : (
                         <span style={{ color: "#ccc" }}>—</span>
@@ -888,9 +652,7 @@ const Models: React.FC = () => {
                 color: "#999",
               }}
             >
-              {searchTerm ||
-              selectedCategory !== "all" ||
-              selectedSeason !== "all"
+              {searchTerm || selectedFirmId !== "all"
                 ? "Arama ve filtre kriterlerine uygun model bulunamadı."
                 : "Henüz hiç model eklenmemiş."}
             </p>

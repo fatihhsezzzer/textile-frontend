@@ -1,11 +1,19 @@
 import React, { useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import ModelistJobList from "./pages/ModelistJobList";
-import ModelistJobTracker from "./pages/ModelistJobTracker";
-import ModelistOrders from "./pages/ModelistOrders";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ExchangeRateProvider } from "./context/ExchangeRateContext";
+import ModelistMyOrders from "./pages/ModelistMyOrders";
+import AccountingOrders from "./pages/AccountingOrders";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ChangePassword from "./pages/ChangePassword";
+import UserManagement from "./pages/UserManagement";
 import Orders from "./pages/Orders";
 import OrderForm from "./pages/OrderForm";
 import OrderDetail from "./pages/OrderDetail";
@@ -31,9 +39,14 @@ import "./App.css";
 const HomeRedirect: React.FC = () => {
   const { user } = useAuth();
 
-  // Modelist kullanıcıları modelist orders sayfasına yönlendir
+  // Modelist kullanıcıları kendi siparişleri sayfasına yönlendir
   if (user?.role === "Modelist") {
-    return <Navigate to="/modelist-orders" replace />;
+    return <Navigate to="/modelist-my-orders" replace />;
+  }
+
+  // Muhasebeci kullanıcıları fatura yönetimi sayfasına yönlendir
+  if (user?.role === "Muhasebeci") {
+    return <Navigate to="/accounting-orders" replace />;
   }
 
   // Diğer kullanıcılar Orders sayfasına
@@ -44,13 +57,21 @@ const PrivateRoute: React.FC<{ children: React.ReactElement }> = ({
   children,
 }) => {
   const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
 
   // Show loading while checking authentication
   if (isLoading) {
     return <div>Loading...</div>; // Basit loading göstergesi
   }
 
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  if (!isAuthenticated) {
+    // Kullanıcının gitmek istediği URL'i hem state'e hem sessionStorage'a kaydet
+    const redirectPath = `${location.pathname}${location.search}`;
+    sessionStorage.setItem("redirectAfterLogin", redirectPath);
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return children;
 };
 
 // Manager-only route component
@@ -75,7 +96,29 @@ const ManagerRoute: React.FC<{ children: React.ReactElement }> = ({
   return children;
 };
 
-// Route component that blocks Modelist users
+// Manager or Accountant route component
+const ManagerOrAccountantRoute: React.FC<{ children: React.ReactElement }> = ({
+  children,
+}) => {
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  // Show loading while checking authentication
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+
+  if (!user || (user.role !== "Manager" && user.role !== "Muhasebeci")) {
+    return <Navigate to="/orders" />;
+  }
+
+  return children;
+};
+
+// Route component that blocks Modelist users from certain pages
 const ModelistRoute: React.FC<{ children: React.ReactElement }> = ({
   children,
 }) => {
@@ -90,9 +133,31 @@ const ModelistRoute: React.FC<{ children: React.ReactElement }> = ({
     return <Navigate to="/login" />;
   }
 
-  // Modelist kullanıcıları kendi ekranlarına yönlendir
+  // Modelist kullanıcıları kendi siparişleri sayfasına yönlendir
   if (user?.role === "Modelist") {
-    return <Navigate to="/modelist-job-tracker" />;
+    return <Navigate to="/modelist-my-orders" />;
+  }
+
+  return children;
+};
+
+// Accountant-only route component
+const AccountantRoute: React.FC<{ children: React.ReactElement }> = ({
+  children,
+}) => {
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  // Show loading while checking authentication
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+
+  if (!user || user.role !== "Muhasebeci") {
+    return <Navigate to="/orders" />;
   }
 
   return children;
@@ -145,281 +210,320 @@ const FullWidthLayout: React.FC<{ children: React.ReactElement }> = ({
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route
-            path="/modelist-job-list"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <ModelistJobList />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/modelist-job-tracker"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <ModelistJobTracker />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/modelist-orders"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <ModelistOrders />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route path="/login" element={<Login />} />
+      <ExchangeRateProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route
+              path="/modelist-my-orders"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <ModelistMyOrders />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/accounting-orders"
+              element={
+                <ManagerOrAccountantRoute>
+                  <Layout>
+                    <AccountingOrders />
+                  </Layout>
+                </ManagerOrAccountantRoute>
+              }
+            />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/change-password"
+              element={
+                <PrivateRoute>
+                  <ChangePassword />
+                </PrivateRoute>
+              }
+            />
 
-          {/* Public QR Code Route - No authentication required */}
-          <Route path="/orderdetail/:orderId" element={<OrderQRDetail />} />
+            {/* QR Code Route - Authentication required for redirect to work */}
+            <Route
+              path="/orderdetail/:orderId"
+              element={
+                <PrivateRoute>
+                  <OrderQRDetail />
+                </PrivateRoute>
+              }
+            />
 
-          <Route
-            path="/register"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <Register />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/orders"
-            element={
-              <PrivateRoute>
-                <ModelistRoute>
+            <Route
+              path="/register"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <Register />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/user-management"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <UserManagement />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/orders"
+              element={
+                <PrivateRoute>
                   <Layout>
                     <Orders />
                   </Layout>
-                </ModelistRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/orders/new"
-            element={
-              <PrivateRoute>
-                <ModelistRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/orders/new"
+              element={
+                <PrivateRoute>
                   <Layout>
                     <OrderForm />
                   </Layout>
-                </ModelistRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/orders/edit/:orderId"
-            element={
-              <PrivateRoute>
-                <ModelistRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/orders/edit/:orderId"
+              element={
+                <PrivateRoute>
                   <Layout>
                     <OrderForm />
                   </Layout>
-                </ModelistRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/orders/detail/:orderId"
-            element={
-              <PrivateRoute>
-                <ModelistRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/orders/detail/:orderId"
+              element={
+                <PrivateRoute>
                   <Layout>
                     <OrderDetail />
                   </Layout>
-                </ModelistRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/workshop-kanban"
-            element={
-              <ManagerRoute>
-                <FullWidthLayout>
-                  <WorkshopKanban />
-                </FullWidthLayout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/firms"
-            element={
-              <PrivateRoute>
-                <ModelistRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/workshop-kanban"
+              element={
+                <PrivateRoute>
+                  <FullWidthLayout>
+                    <WorkshopKanban />
+                  </FullWidthLayout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/firms"
+              element={
+                <ManagerOrAccountantRoute>
                   <Layout>
                     <Firms />
                   </Layout>
-                </ModelistRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/models"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <Models />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/workshops"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <Workshops />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/workshops/:workshopId/costs"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <WorkshopCosts />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/models"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <Models />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/models/:modelId/costs"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <ModelCosts />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/operators"
-            element={
-              <PrivateRoute>
-                <ModelistRoute>
+                </ManagerOrAccountantRoute>
+              }
+            />
+            <Route
+              path="/models"
+              element={
+                <PrivateRoute>
                   <Layout>
-                    <Operators />
+                    <Models />
                   </Layout>
-                </ModelistRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/technics"
-            element={
-              <PrivateRoute>
-                <ModelistRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/workshops"
+              element={
+                <ManagerRoute>
                   <Layout>
-                    <Technics />
+                    <Workshops />
                   </Layout>
-                </ModelistRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/reports"
-            element={
-              <PrivateRoute>
-                <ModelistRoute>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/workshops/:workshopId/costs"
+              element={
+                <ManagerRoute>
                   <Layout>
-                    <Reports />
+                    <WorkshopCosts />
                   </Layout>
-                </ModelistRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <PrivateRoute>
-                <ModelistRoute>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/models"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <Models />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            {/* Model Costs - Firma Listesi */}
+            <Route
+              path="/model-costs"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <ModelCosts />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            {/* Model Costs - Firma Modelleri */}
+            <Route
+              path="/model-costs/firm/:firmId"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <ModelCosts />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            {/* Model Costs - Model Detay */}
+            <Route
+              path="/model-costs/model/:modelId"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <ModelCosts />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            {/* Eski route - geriye uyumluluk için */}
+            <Route
+              path="/models/:modelId/costs"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <ModelCosts />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/operators"
+              element={
+                <PrivateRoute>
+                  <ModelistRoute>
+                    <Layout>
+                      <Operators />
+                    </Layout>
+                  </ModelistRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/technics"
+              element={
+                <PrivateRoute>
+                  <ModelistRoute>
+                    <Layout>
+                      <Technics />
+                    </Layout>
+                  </ModelistRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <PrivateRoute>
+                  <ModelistRoute>
+                    <Layout>
+                      <Reports />
+                    </Layout>
+                  </ModelistRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ManagerRoute>
                   <Layout>
                     <Settings />
                   </Layout>
-                </ModelistRoute>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/cost"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <CostManagement />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/cost/categories/new"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <CategoryForm />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/cost/categories/:id"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <CategoryForm />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/cost/items/new"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <CostItemForm />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/cost/items/:id/edit"
-            element={
-              <ManagerRoute>
-                <Layout>
-                  <CostItemForm />
-                </Layout>
-              </ManagerRoute>
-            }
-          />
-          <Route
-            path="/"
-            element={
-              <PrivateRoute>
-                <HomeRedirect />
-              </PrivateRoute>
-            }
-          />
-        </Routes>
-      </BrowserRouter>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/cost"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <CostManagement />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/cost/categories/new"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <CategoryForm />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/cost/categories/:id"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <CategoryForm />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/cost/items/new"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <CostItemForm />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/cost/items/:id/edit"
+              element={
+                <ManagerRoute>
+                  <Layout>
+                    <CostItemForm />
+                  </Layout>
+                </ManagerRoute>
+              }
+            />
+            <Route
+              path="/"
+              element={
+                <PrivateRoute>
+                  <HomeRedirect />
+                </PrivateRoute>
+              }
+            />
+          </Routes>
+        </BrowserRouter>
+      </ExchangeRateProvider>
     </AuthProvider>
   );
 }

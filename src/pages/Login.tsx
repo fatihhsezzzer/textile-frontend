@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { authService } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 import { User } from "../types";
@@ -11,7 +11,14 @@ const Login: React.FC = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
+
+  // Location state'inden veya sessionStorage'dan redirect URL'ini al
+  const fromLocation = (location.state as any)?.from;
+  const fromPath = fromLocation
+    ? `${fromLocation.pathname}${fromLocation.search || ""}`
+    : sessionStorage.getItem("redirectAfterLogin") || "/orders";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,6 +27,8 @@ const Login: React.FC = () => {
 
     try {
       const response = await authService.login({ email, password });
+
+      console.log("Login response:", response);
 
       // Backend'den gelen response formatına göre user objesi oluştur
       let user: User;
@@ -34,11 +43,31 @@ const Login: React.FC = () => {
           firstName: response.firstName || "User",
           lastName: response.lastName || "",
           role: response.role || "User",
+          workshopId: response.workshopId,
+          workshop: response.workshop,
+          isActive: true,
         };
       }
 
+      // Her durumda login fonksiyonunu çağır (AuthContext'i güncelle)
       login(response.token, user);
-      navigate("/orders");
+
+      // İlk giriş kontrolü
+      if (response.isFirstLogin === true) {
+        setLoading(false);
+        // Şifre değiştirme ekranına yönlendir
+        navigate("/change-password", {
+          state: { isFirstLogin: true },
+          replace: true,
+        });
+        return;
+      }
+
+      // sessionStorage'ı temizle
+      sessionStorage.removeItem("redirectAfterLogin");
+
+      // Redirect: kullanıcının gitmek istediği sayfaya yönlendir
+      navigate(fromPath, { replace: true });
     } catch (err: any) {
       let errorMessage = "Giriş başarısız. Lütfen bilgilerinizi kontrol edin.";
 
@@ -63,7 +92,7 @@ const Login: React.FC = () => {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h1>Tekstil Yönetim Sistemi</h1>
+        <img src="/Images/logo-siyah.png" alt="Logo" className="login-logo" />
         <h2>Giriş Yap</h2>
 
         {error && <div className="error-message">{error}</div>}

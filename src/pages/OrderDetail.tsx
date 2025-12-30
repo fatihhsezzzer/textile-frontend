@@ -492,9 +492,7 @@ const OrderDetail: React.FC = () => {
                         <td>
                           {cost.quantityUsed}{" "}
                           <span className="unit-text">
-                            {cost.costItem?.costUnit?.unitCode ||
-                              cost.costItem?.unit ||
-                              ""}
+                            {cost.costItem?.unit || ""}
                           </span>
                         </td>
                         <td>
@@ -626,7 +624,7 @@ const OrderDetail: React.FC = () => {
                           </td>
                           <td>
                             <strong>{cost.quantity}</strong>
-                            {cost.costItem?.costUnit && (
+                            {cost.costItem?.unit && (
                               <span
                                 style={{
                                   marginLeft: "4px",
@@ -634,7 +632,7 @@ const OrderDetail: React.FC = () => {
                                   color: "#666",
                                 }}
                               >
-                                {cost.costItem.costUnit.unitCode}
+                                {cost.costItem.unit}
                               </span>
                             )}
                           </td>

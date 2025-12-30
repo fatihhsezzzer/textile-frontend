@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Firm } from "../types";
 import { firmService } from "../services/dataService";
+import { turkishIncludes } from "../utils/formatters";
 import "./ModelModal.css"; // FirmModal için aynı CSS'i kullanıyoruz
 
 interface FirmModalProps {
@@ -113,8 +114,8 @@ const FirmModal: React.FC<FirmModalProps> = ({
 
   const filteredFirms = firms.filter(
     (firm) =>
-      firm.firmName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      firm.firmCode.toLowerCase().includes(searchTerm.toLowerCase())
+      turkishIncludes(firm.firmName, searchTerm) ||
+      turkishIncludes(firm.firmCode, searchTerm)
   );
 
   if (!isOpen) return null;

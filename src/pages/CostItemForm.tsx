@@ -15,6 +15,7 @@ const calculationTypeLabels: Record<CalculationType, string> = {
   [CalculationType.MeterBased]: "Metre Bazlı",
   [CalculationType.AreaBased]: "Alan Bazlı (m²)",
   [CalculationType.PaintBased]: "Boya Hesaplama",
+  [CalculationType.CustomCost]: "Özel Maliyet (Fason/Sabit Tutar)",
 };
 
 // Hesaplama tipine göre parametre sayısı ve varsayılan başlıklar
@@ -66,6 +67,12 @@ const calculationTypeConfig: Record<
     paramCount: 2,
     defaultLabels: ["Litre", "Çeşit Sayısı"],
     description: "Boya hesaplama: Litre × Çeşit Sayısı × Fire.",
+  },
+  [CalculationType.CustomCost]: {
+    paramCount: 0,
+    defaultLabels: [],
+    description:
+      "Özel maliyet: TotalCost değeri direkt girilir. Birim fiyat, miktar ve fire hesaplaması yapılmaz. Fason üretim, paket hizmetler ve sabit maliyetler için kullanılır.",
   },
 };
 
@@ -154,7 +161,11 @@ const CostItemForm: React.FC<CostItemFormProps> = () => {
       return;
     }
 
-    if (formData.unitPrice <= 0) {
+    // CustomCost tipinde birim fiyat kontrolü yapma
+    if (
+      formData.calculationType !== CalculationType.CustomCost &&
+      formData.unitPrice <= 0
+    ) {
       alert("Birim fiyat sıfırdan büyük olmalıdır!");
       return;
     }
@@ -563,28 +574,70 @@ const CostItemForm: React.FC<CostItemFormProps> = () => {
         <div className="form-section">
           <h2>Fiyat Bilgileri</h2>
           <div className="form-grid">
-            <div className="form-group">
-              <label>Birim Fiyat *</label>
-              <input
-                type="number"
-                value={formData.unitPrice}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    unitPrice: parseFloat(e.target.value) || 0,
-                  })
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                    e.preventDefault();
+            {formData.calculationType !== CalculationType.CustomCost && (
+              <div className="form-group">
+                <label>Birim Fiyat *</label>
+                <input
+                  type="number"
+                  value={formData.unitPrice}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      unitPrice: parseFloat(e.target.value) || 0,
+                    })
                   }
-                }}
-                placeholder="0.00"
-                min="0"
-                step="0.01"
-                required
-              />
-            </div>
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                      e.preventDefault();
+                    }
+                  }}
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </div>
+            )}
+
+            {formData.calculationType === CalculationType.CustomCost && (
+              <div className="form-group full-width">
+                <div
+                  style={{
+                    background: "#fff3cd",
+                    border: "2px solid #ffc107",
+                    borderRadius: "8px",
+                    padding: "16px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="#ff9800"
+                    >
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+                    </svg>
+                    <strong style={{ color: "#856404" }}>
+                      Özel Maliyet Modu
+                    </strong>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "13px", color: "#856404" }}>
+                    Bu hesaplama tipinde{" "}
+                    <strong>birim fiyat kullanılmaz</strong>. Toplam maliyet
+                    tutarı transfer modalında direkt girilecektir. Fason üretim,
+                    paket hizmetler ve sabit maliyetler için uygundur.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="form-group">
               <label>Döviz *</label>
@@ -603,38 +656,44 @@ const CostItemForm: React.FC<CostItemFormProps> = () => {
               </select>
             </div>
 
-            <div className="form-group">
-              <label>
-                Fire Yüzdesi (%)
-                <span
-                  style={{ fontSize: "12px", color: "#666", marginLeft: "4px" }}
-                >
-                  (Opsiyonel)
-                </span>
-              </label>
-              <input
-                type="number"
-                value={formData.wastagePercentage}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    wastagePercentage: parseFloat(e.target.value) || 0,
-                  })
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                    e.preventDefault();
+            {formData.calculationType !== CalculationType.CustomCost && (
+              <div className="form-group">
+                <label>
+                  Fire Yüzdesi (%)
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "#666",
+                      marginLeft: "4px",
+                    }}
+                  >
+                    (Opsiyonel)
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  value={formData.wastagePercentage}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      wastagePercentage: parseFloat(e.target.value) || 0,
+                    })
                   }
-                }}
-                placeholder="Örn: 10 (%10 fire)"
-                min="0"
-                max="100"
-                step="0.1"
-                style={{
-                  borderColor: "#ff9800",
-                }}
-              />
-            </div>
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                      e.preventDefault();
+                    }
+                  }}
+                  placeholder="Örn: 10 (%10 fire)"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  style={{
+                    borderColor: "#ff9800",
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
 

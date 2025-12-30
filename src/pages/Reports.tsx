@@ -4,11 +4,12 @@ import {
   modelService,
   firmService,
   orderService,
-  exchangeRateService,
 } from "../services/dataService";
-import { ModelCost, Model, Firm, OrderStatus } from "../types";
+import { ModelCost, Model, Firm, OrderStatus, Technic } from "../types";
 import { formatCurrency, formatNumber } from "../utils/formatters";
 import PageLoader from "../components/PageLoader";
+import TechnicModal from "../components/TechnicModal";
+import { useExchangeRates } from "../context/ExchangeRateContext";
 import "./Reports.css";
 
 interface ModelCostReport {
@@ -21,9 +22,12 @@ interface ModelCostReport {
   technics: string[];
   totalAmount: number; // Toplam tutar (sipariş tutarı) - TL
   totalCost: number; // Maliyet - TL
+  costWithOverhead: number; // Genel gider eklenmiş maliyet - TL
+  finalCostWithProfit: number; // Kar marjı eklenmiş nihai maliyet - TL
   unitPrice: number; // Birim fiyat (orijinal döviz)
   unitPriceTRY: number; // Birim fiyat - TL
   unitCost: number; // Birim maliyet - TL
+  suggestedPrice: number; // Hesaplanan Fiyat (kar marjı dahil) - TL
   currency: string;
   orderId: string;
   acceptanceDate: string; // Kabul tarihi
@@ -43,6 +47,7 @@ interface CostDetailModal {
 }
 
 const Reports: React.FC = () => {
+  const { usdRate, eurRate, gbpRate } = useExchangeRates();
   const [reportData, setReportData] = useState<ModelCostReport[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [firms, setFirms] = useState<Firm[]>([]);
@@ -57,19 +62,11 @@ const Reports: React.FC = () => {
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
-  const [exchangeRates, setExchangeRates] = useState<{
-    usd: number | null;
-    eur: number | null;
-    gbp: number | null;
-  }>({
-    usd: null,
-    eur: null,
-    gbp: null,
-  });
-  const [, setRatesLoaded] = useState(false);
   const [expandedTechnics, setExpandedTechnics] = useState<Set<string>>(
     new Set()
   );
+  const [selectedTechnics, setSelectedTechnics] = useState<Technic[]>([]);
+  const [showTechnicModal, setShowTechnicModal] = useState(false);
   const [costDetailModal, setCostDetailModal] = useState<CostDetailModal>({
     isOpen: false,
     orderId: "",
@@ -83,7 +80,6 @@ const Reports: React.FC = () => {
   });
 
   useEffect(() => {
-    loadExchangeRates();
     loadData();
   }, []);
 
@@ -100,68 +96,9 @@ const Reports: React.FC = () => {
     return () => document.removeEventListener("click", handleClickOutside);
   }, []);
 
-  const loadExchangeRates = async () => {
-    try {
-      const rates = await exchangeRateService.getLatest();
-      const usdRate = rates.find((rate) => rate.currencyCode === "USD");
-      const eurRate = rates.find((rate) => rate.currencyCode === "EUR");
-      const gbpRate = rates.find((rate) => rate.currencyCode === "GBP");
-
-      setExchangeRates({
-        usd: usdRate ? usdRate.banknoteSelling : null,
-        eur: eurRate ? eurRate.banknoteSelling : null,
-        gbp: gbpRate ? gbpRate.banknoteSelling : null,
-      });
-      setRatesLoaded(true);
-    } catch (error) {
-      console.error("❌ Kur bilgisi yüklenemedi:", error);
-      setRatesLoaded(true); // Yükleme tamamlandı ama kurlar yok
-    }
-  };
-
-  // Döviz dönüşümü fonksiyonu - kur yoksa 0 döner
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const convertToTRY = (amount: number, currency: string): number => {
-    if (currency === "TRY" || currency === "TL") return amount;
-    if (currency === "USD" && exchangeRates.usd)
-      return amount * exchangeRates.usd;
-    if (currency === "EUR" && exchangeRates.eur)
-      return amount * exchangeRates.eur;
-    if (currency === "GBP" && exchangeRates.gbp)
-      return amount * exchangeRates.gbp;
-    return 0; // Kur yoksa dönüşüm yapılamaz
-  };
-
   const loadData = async () => {
     try {
       setLoading(true);
-
-      // Önce güncel kurları al
-      let rates: {
-        usd: number | null;
-        eur: number | null;
-        gbp: number | null;
-      } = {
-        usd: null,
-        eur: null,
-        gbp: null,
-      };
-      try {
-        const ratesData = await exchangeRateService.getLatest();
-        const usdRate = ratesData.find((rate) => rate.currencyCode === "USD");
-        const eurRate = ratesData.find((rate) => rate.currencyCode === "EUR");
-        const gbpRate = ratesData.find((rate) => rate.currencyCode === "GBP");
-        rates = {
-          usd: usdRate ? usdRate.banknoteSelling : null,
-          eur: eurRate ? eurRate.banknoteSelling : null,
-          gbp: gbpRate ? gbpRate.banknoteSelling : null,
-        };
-        setExchangeRates(rates);
-        setRatesLoaded(true);
-      } catch (err) {
-        console.error("❌ Kurlar yüklenemedi");
-        setRatesLoaded(true);
-      }
 
       const [modelsData, firmsData, ordersData] = await Promise.all([
         modelService.getAll(),
@@ -175,9 +112,9 @@ const Reports: React.FC = () => {
       // Döviz dönüşüm fonksiyonu (güncel kurlarla) - kur yoksa 0 döner
       const toTRY = (amount: number, currency: string): number => {
         if (currency === "TRY" || currency === "TL") return amount;
-        if (currency === "USD" && rates.usd) return amount * rates.usd;
-        if (currency === "EUR" && rates.eur) return amount * rates.eur;
-        if (currency === "GBP" && rates.gbp) return amount * rates.gbp;
+        if (currency === "USD" && usdRate) return amount * usdRate;
+        if (currency === "EUR" && eurRate) return amount * eurRate;
+        if (currency === "GBP" && gbpRate) return amount * gbpRate;
         return 0; // Kur yoksa dönüşüm yapılamaz
       };
 
@@ -205,6 +142,19 @@ const Reports: React.FC = () => {
             return sum + toTRY(amount, currency);
           }, 0);
 
+          // Backend'den gelen costWithOverhead ve finalCostWithProfit değerlerini topla
+          const costWithOverhead = orderCosts.reduce((sum, cost) => {
+            const amount = cost.costWithOverhead || 0;
+            const currency = cost.currency || "TRY";
+            return sum + toTRY(amount, currency);
+          }, 0);
+
+          const finalCostWithProfit = orderCosts.reduce((sum, cost) => {
+            const amount = cost.finalCostWithProfit || 0;
+            const currency = cost.currency || "TRY";
+            return sum + toTRY(amount, currency);
+          }, 0);
+
           const model = modelsData.find((m) => m.modelId === order.modelId);
           const firm = firmsData.find((f) => f.firmId === order.firmId);
 
@@ -228,19 +178,19 @@ const Reports: React.FC = () => {
             technics: technics.filter((t) => t),
             totalAmount: totalAmountTRY,
             totalCost: totalCost,
+            costWithOverhead: costWithOverhead,
+            finalCostWithProfit: finalCostWithProfit,
             unitPrice: orderPrice,
             unitPriceTRY: unitPriceTRY,
             unitCost:
-              (order.quantity || 1) > 0 ? totalCost / (order.quantity || 1) : 0,
+              order.quantity > 0 ? costWithOverhead / order.quantity : 0,
+            suggestedPrice:
+              order.quantity > 0 ? finalCostWithProfit / order.quantity : 0,
             currency: orderCurrency,
             orderId: order.orderId,
             acceptanceDate: order.acceptanceDate,
             completionDate: order.completionDate || order.updatedAt || "",
           });
-
-          console.log(
-            `📅 Order ${order.orderId}: completionDate=${order.completionDate}, updatedAt=${order.updatedAt}`
-          );
         } catch (error) {
           console.warn(`Model ${order.modelId} için maliyet yüklenemedi`);
         }
@@ -261,8 +211,8 @@ const Reports: React.FC = () => {
     if (selectedFirmId !== "all") {
       filtered = filtered.filter(
         (r) =>
-          firms.find((f) => f.firmId === selectedFirmId)?.firmCode ===
-          r.firmCode
+          firms.find((f) => f.firmId === selectedFirmId)?.firmName ===
+          r.firmName
       );
     }
 
@@ -270,26 +220,44 @@ const Reports: React.FC = () => {
       filtered = filtered.filter((r) => r.modelId === selectedModelId);
     }
 
+    // Teknik filtresi - Seçilen tekniklerle birebir eşleşen siparişler
+    if (selectedTechnics.length > 0) {
+      const selectedTechnicNames = selectedTechnics.map((t) => t.name);
+      filtered = filtered.filter((r) => {
+        // Sipariş tekniklerini al
+        const orderTechnics = r.technics;
+
+        // Birebir eşleşme kontrolü: Aynı sayıda ve aynı teknikler olmalı
+        if (orderTechnics.length !== selectedTechnicNames.length) {
+          return false;
+        }
+
+        // Her seçili teknik sipariş tekniklerinde olmalı
+        const allSelected = selectedTechnicNames.every((techName) =>
+          orderTechnics.includes(techName)
+        );
+
+        // Her sipariş tekniği seçili tekniklerde olmalı
+        const allOrder = orderTechnics.every((techName) =>
+          selectedTechnicNames.includes(techName)
+        );
+
+        return allSelected && allOrder;
+      });
+    }
+
     // Tarih filtresi - Tamamlanma tarihine göre
     if (startDate || endDate) {
-      console.log(
-        `🔍 Tarih filtresi: startDate=${startDate}, endDate=${endDate}`
-      );
-      console.log(`📊 Filtreleme öncesi kayıt sayısı: ${filtered.length}`);
     }
 
     if (startDate) {
       filtered = filtered.filter((r) => {
         if (!r.completionDate) {
-          console.log(`⚠️ ${r.orderId}: completionDate boş`);
           return false;
         }
         // Sadece tarih kısmını karşılaştır (saat dilimi sorunlarını önle)
         const completionDateStr = r.completionDate.split("T")[0];
         const result = completionDateStr >= startDate;
-        console.log(
-          `📅 ${r.orderId}: ${completionDateStr} >= ${startDate} = ${result}`
-        );
         return result;
       });
     }
@@ -304,7 +272,6 @@ const Reports: React.FC = () => {
     }
 
     if (startDate || endDate) {
-      console.log(`📊 Filtreleme sonrası kayıt sayısı: ${filtered.length}`);
     }
 
     // Sıralama
@@ -366,9 +333,7 @@ const Reports: React.FC = () => {
         orderWorkshopCosts = await costService.getOrderWorkshopCosts(
           row.orderId
         );
-      } catch (e) {
-        console.log("Atölye maliyetleri alınamadı:", e);
-      }
+      } catch (e) {}
 
       // OrderWorkshopCost'ları ModelCost formatına dönüştür
       const workshopCostsAsModelCost: ModelCost[] = orderWorkshopCosts.map(
@@ -399,9 +364,6 @@ const Reports: React.FC = () => {
       const allCosts = [...modelCosts, ...workshopCostsAsModelCost];
 
       console.log("📊 Model Costs (Order filtered):", modelCosts);
-      console.log("🏭 Workshop Costs:", workshopCostsAsModelCost);
-      console.log("📋 All Costs:", allCosts);
-
       setCostDetailModal((prev) => ({
         ...prev,
         costs: allCosts,
@@ -441,11 +403,62 @@ const Reports: React.FC = () => {
     return 0;
   };
 
+  // costWithOverhead değerini TL'ye çevir
+  const convertCostWithOverheadToTRY = (cost: ModelCost): number => {
+    const amount = cost.costWithOverhead || 0;
+    const currency = cost.currency || "TRY";
+    if (currency === "TRY" || currency === "TL") return amount;
+    if (currency === "USD" && cost.usdRate) return amount * cost.usdRate;
+    if (currency === "EUR" && cost.eurRate) return amount * cost.eurRate;
+    if (currency === "GBP" && cost.gbpRate) return amount * cost.gbpRate;
+    return 0;
+  };
+
+  // finalCostWithProfit değerini TL'ye çevir
+  const convertFinalCostToTRY = (cost: ModelCost): number => {
+    const amount = cost.finalCostWithProfit || 0;
+    const currency = cost.currency || "TRY";
+    if (currency === "TRY" || currency === "TL") return amount;
+    if (currency === "USD" && cost.usdRate) return amount * cost.usdRate;
+    if (currency === "EUR" && cost.eurRate) return amount * cost.eurRate;
+    if (currency === "GBP" && cost.gbpRate) return amount * cost.gbpRate;
+    return 0;
+  };
+
+  // Teknik seçimi handler
+  const handleTechnicSelect = (technic: Technic) => {
+    const isAlreadySelected = selectedTechnics.some(
+      (t) => t.technicId === technic.technicId
+    );
+
+    if (isAlreadySelected) {
+      // Zaten seçiliyse kaldır
+      setSelectedTechnics(
+        selectedTechnics.filter((t) => t.technicId !== technic.technicId)
+      );
+    } else {
+      // Seçili değilse ekle
+      setSelectedTechnics([...selectedTechnics, technic]);
+    }
+  };
+
+  const handleClearTechnics = () => {
+    setSelectedTechnics([]);
+  };
+
   // Toplamlar
   const filteredData = getFilteredData();
   const totalQuantity = filteredData.reduce((sum, r) => sum + r.quantity, 0);
   const totalAmount = filteredData.reduce((sum, r) => sum + r.totalAmount, 0);
   const totalCost = filteredData.reduce((sum, r) => sum + r.totalCost, 0);
+  const totalCostWithOverhead = filteredData.reduce(
+    (sum, r) => sum + r.costWithOverhead,
+    0
+  );
+  const totalFinalCost = filteredData.reduce(
+    (sum, r) => sum + r.finalCostWithProfit,
+    0
+  );
 
   if (loading) {
     return <PageLoader message="Rapor yükleniyor..." />;
@@ -465,7 +478,7 @@ const Reports: React.FC = () => {
               <span>
                 {selectedFirmId === "all"
                   ? "Tüm Firmalar"
-                  : firms.find((f) => f.firmId === selectedFirmId)?.firmCode ||
+                  : firms.find((f) => f.firmId === selectedFirmId)?.firmName ||
                     "Seçiniz"}
               </span>
               <svg
@@ -510,7 +523,7 @@ const Reports: React.FC = () => {
                           .toLowerCase()
                           .includes(firmSearch.toLowerCase())
                     )
-                    .sort((a, b) => a.firmCode.localeCompare(b.firmCode))
+                    .sort((a, b) => a.firmName.localeCompare(b.firmName))
                     .map((firm) => (
                       <div
                         key={firm.firmId}
@@ -523,7 +536,7 @@ const Reports: React.FC = () => {
                           setFirmSearch("");
                         }}
                       >
-                        {firm.firmCode} - {firm.firmName}
+                        {firm.firmName}
                       </div>
                     ))}
                 </div>
@@ -621,6 +634,95 @@ const Reports: React.FC = () => {
             className="date-input"
           />
         </div>
+
+        {/* Teknik Filtresi */}
+        <div className="filter-group">
+          <label>Teknikler</label>
+          <button
+            className="technic-filter-btn"
+            onClick={() => setShowTechnicModal(true)}
+            style={{
+              padding: "8px 16px",
+              background: selectedTechnics.length > 0 ? "#667eea" : "white",
+              color: selectedTechnics.length > 0 ? "white" : "#333",
+              border:
+                selectedTechnics.length > 0
+                  ? "2px solid #667eea"
+                  : "2px solid #e0e0e0",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "500",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              transition: "all 0.2s ease",
+              width: "100%",
+              justifyContent: "space-between",
+            }}
+          >
+            <span>
+              {selectedTechnics.length === 0
+                ? "Teknik Seç"
+                : `${selectedTechnics.length} Teknik Seçili`}
+            </span>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+          </button>
+          {selectedTechnics.length > 0 && (
+            <div
+              style={{
+                marginTop: "8px",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "6px",
+              }}
+            >
+              {selectedTechnics.map((tech) => (
+                <span
+                  key={tech.technicId}
+                  style={{
+                    padding: "4px 10px",
+                    background: "#e0e7ff",
+                    color: "#4338ca",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    fontWeight: "500",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  {tech.name}
+                  <button
+                    onClick={() => handleTechnicSelect(tech)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#4338ca",
+                      cursor: "pointer",
+                      padding: "0",
+                      marginLeft: "4px",
+                      fontSize: "16px",
+                      lineHeight: "1",
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
         {(startDate || endDate) && (
           <button
             className="clear-dates-btn"
@@ -680,9 +782,38 @@ const Reports: React.FC = () => {
             </svg>
           </div>
           <div className="card-content">
-            <span className="card-label">Toplam Maliyet</span>
+            <span className="card-label">
+              Toplam Maliyet (Genel Gider Dahil)
+            </span>
             <span className="card-value">
-              {formatCurrency(totalCost, "TRY")}
+              {formatCurrency(totalCostWithOverhead, "TRY")}
+            </span>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div
+            className="card-icon purple"
+            style={{
+              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            }}
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+              <line x1="12" y1="22.08" x2="12" y2="12" />
+            </svg>
+          </div>
+          <div className="card-content">
+            <span className="card-label">Hesaplanan Tutar (Kar Dahil)</span>
+            <span className="card-value" style={{ color: "#667eea" }}>
+              {formatCurrency(totalFinalCost, "TRY")}
             </span>
           </div>
         </div>
@@ -704,10 +835,12 @@ const Reports: React.FC = () => {
             <span className="card-label">Kar/Zarar</span>
             <span
               className={`card-value ${
-                totalAmount - totalCost >= 0 ? "positive" : "negative"
+                totalAmount - totalCostWithOverhead >= 0
+                  ? "positive"
+                  : "negative"
               }`}
             >
-              {formatCurrency(totalAmount - totalCost, "TRY")}
+              {formatCurrency(totalAmount - totalCostWithOverhead, "TRY")}
             </span>
           </div>
         </div>
@@ -715,7 +848,7 @@ const Reports: React.FC = () => {
           <div
             className={`card-icon ${
               totalAmount > 0 &&
-              ((totalAmount - totalCost) / totalAmount) * 100 >= 0
+              ((totalAmount - totalCostWithOverhead) / totalAmount) * 100 >= 0
                 ? "green"
                 : "red"
             }`}
@@ -738,28 +871,29 @@ const Reports: React.FC = () => {
             <span
               className={`card-value ${
                 totalAmount > 0 &&
-                ((totalAmount - totalCost) / totalAmount) * 100 >= 0
+                ((totalAmount - totalCostWithOverhead) / totalAmount) * 100 >= 0
                   ? "positive"
                   : "negative"
               }`}
             >
               {totalAmount > 0
-                ? `%${(((totalAmount - totalCost) / totalAmount) * 100).toFixed(
-                    2
-                  )}`
+                ? `%${(
+                    ((totalAmount - totalCostWithOverhead) / totalAmount) *
+                    100
+                  ).toFixed(2)}`
                 : "%0.00"}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Tablo */}
-      <div className="reports-table-container">
+      {/* Tablo - Desktop */}
+      <div className="reports-table-container desktop-only">
         <table className="reports-table">
           <thead>
             <tr>
-              <th onClick={() => handleSort("firmCode")} className="sortable">
-                Firma Kodu {getSortIcon("firmCode")}
+              <th onClick={() => handleSort("firmName")} className="sortable">
+                Firma {getSortIcon("firmName")}
               </th>
               <th onClick={() => handleSort("modelCode")} className="sortable">
                 Model Kodu {getSortIcon("modelCode")}
@@ -780,6 +914,12 @@ const Reports: React.FC = () => {
               >
                 Maliyet {getSortIcon("totalCost")}
               </th>
+              <th className="text-right" style={{ color: "#667eea" }}>
+                Genel Gider (+%40)
+              </th>
+              <th className="text-right" style={{ color: "#667eea" }}>
+                Hesaplanan Tutar
+              </th>
               <th
                 onClick={() => handleSort("unitPrice")}
                 className="sortable text-right"
@@ -792,6 +932,12 @@ const Reports: React.FC = () => {
               >
                 Birim Maliyet {getSortIcon("unitCost")}
               </th>
+              <th
+                onClick={() => handleSort("suggestedPrice")}
+                className="sortable text-right"
+              >
+                Hesaplanan Fiyat {getSortIcon("suggestedPrice")}
+              </th>
               <th className="text-right">Kar/Zarar</th>
               <th className="text-center">Detay</th>
             </tr>
@@ -799,7 +945,7 @@ const Reports: React.FC = () => {
           <tbody>
             {filteredData.length === 0 ? (
               <tr>
-                <td colSpan={10} className="empty-row">
+                <td colSpan={12} className="empty-row">
                   Gösterilecek veri bulunamadı
                 </td>
               </tr>
@@ -807,7 +953,7 @@ const Reports: React.FC = () => {
               filteredData.map((row, index) => (
                 <tr key={`${row.orderId}-${index}`}>
                   <td>
-                    <span className="firm-code">{row.firmCode}</span>
+                    <span className="firm-code">{row.firmName}</span>
                   </td>
                   <td>
                     <span className="model-code">{row.modelCode}</span>
@@ -887,6 +1033,22 @@ const Reports: React.FC = () => {
                     </span>
                   </td>
                   <td className="text-right">
+                    <span
+                      className="cost"
+                      style={{ color: "#667eea", fontWeight: "600" }}
+                    >
+                      {formatCurrency(row.costWithOverhead, "TRY")}
+                    </span>
+                  </td>
+                  <td className="text-right">
+                    <span
+                      className="cost"
+                      style={{ color: "#667eea", fontWeight: "600" }}
+                    >
+                      {formatCurrency(row.finalCostWithProfit, "TRY")}
+                    </span>
+                  </td>
+                  <td className="text-right">
                     <div className="price-with-currency">
                       <span className="unit-price">
                         {formatCurrency(row.unitPrice, row.currency)}
@@ -904,14 +1066,22 @@ const Reports: React.FC = () => {
                     </span>
                   </td>
                   <td className="text-right">
+                    <span className="suggested-price">
+                      {formatCurrency(row.suggestedPrice, "TRY")}
+                    </span>
+                  </td>
+                  <td className="text-right">
                     <span
                       className={`profit-loss ${
-                        row.totalAmount - row.totalCost >= 0
+                        row.totalAmount - row.costWithOverhead >= 0
                           ? "positive"
                           : "negative"
                       }`}
                     >
-                      {formatCurrency(row.totalAmount - row.totalCost, "TRY")}
+                      {formatCurrency(
+                        row.totalAmount - row.costWithOverhead,
+                        "TRY"
+                      )}
                     </span>
                   </td>
                   <td className="text-center">
@@ -954,15 +1124,26 @@ const Reports: React.FC = () => {
                 <td className="text-right">
                   <strong>{formatCurrency(totalCost, "TRY")}</strong>
                 </td>
+                <td className="text-right">
+                  <strong>
+                    {formatCurrency(totalCostWithOverhead, "TRY")}
+                  </strong>
+                </td>
+                <td className="text-right">
+                  <strong>{formatCurrency(totalFinalCost, "TRY")}</strong>
+                </td>
+                <td></td>
                 <td></td>
                 <td></td>
                 <td className="text-right">
                   <strong
                     className={
-                      totalAmount - totalCost >= 0 ? "positive" : "negative"
+                      totalAmount - totalCostWithOverhead >= 0
+                        ? "positive"
+                        : "negative"
                     }
                   >
-                    {formatCurrency(totalAmount - totalCost, "TRY")}
+                    {formatCurrency(totalAmount - totalCostWithOverhead, "TRY")}
                   </strong>
                 </td>
                 <td></td>
@@ -970,6 +1151,183 @@ const Reports: React.FC = () => {
             </tfoot>
           )}
         </table>
+      </div>
+
+      {/* Mobil Kart Görünümü */}
+      <div className="reports-cards-container mobile-only">
+        {filteredData.length === 0 ? (
+          <div className="empty-state">
+            <p>Gösterilecek veri bulunamadı</p>
+          </div>
+        ) : (
+          filteredData.map((row, index) => (
+            <div key={`${row.orderId}-${index}`} className="report-card">
+              <div className="report-card-header">
+                <div className="card-firm">
+                  <span className="firm-code">{row.firmName}</span>
+                </div>
+                <div className="card-model">
+                  <span className="model-code">{row.modelCode}</span>
+                </div>
+              </div>
+
+              <div className="report-card-body">
+                <div className="card-row">
+                  <span className="card-label">Adet:</span>
+                  <span className="quantity-badge">
+                    {formatNumber(row.quantity)}
+                  </span>
+                </div>
+
+                {row.technics.length > 0 && (
+                  <div className="card-row technics-row">
+                    <span className="card-label">Teknikler:</span>
+                    <div className="technics-list">
+                      {row.technics.slice(0, 3).map((t, i) => (
+                        <span key={i} className="technic-tag">
+                          {t}
+                        </span>
+                      ))}
+                      {row.technics.length > 3 && (
+                        <span className="technic-tag more">
+                          +{row.technics.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="card-row">
+                  <span className="card-label">Toplam Tutar:</span>
+                  <span className="amount">
+                    {formatCurrency(row.totalAmount, "TRY")}
+                  </span>
+                </div>
+
+                <div className="card-row">
+                  <span className="card-label">Maliyet:</span>
+                  <span className="cost">
+                    {formatCurrency(row.totalCost, "TRY")}
+                  </span>
+                </div>
+
+                <div className="card-row">
+                  <span className="card-label">Genel Gider Dahil:</span>
+                  <span className="cost" style={{ color: "#667eea" }}>
+                    {formatCurrency(row.costWithOverhead, "TRY")}
+                  </span>
+                </div>
+
+                <div className="card-row">
+                  <span className="card-label">Birim Fiyat:</span>
+                  <div className="price-with-currency">
+                    <span className="unit-price">
+                      {formatCurrency(row.unitPrice, row.currency)}
+                    </span>
+                    {row.currency !== "TRY" && row.currency !== "TL" && (
+                      <span className="price-try">
+                        ≈ {formatCurrency(row.unitPriceTRY, "TRY")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="card-row">
+                  <span className="card-label">Birim Maliyet:</span>
+                  <span className="unit-cost">
+                    {formatCurrency(row.unitCost, "TRY")}
+                  </span>
+                </div>
+
+                <div className="card-row">
+                  <span className="card-label">Hesaplanan Fiyat:</span>
+                  <span className="suggested-price">
+                    {formatCurrency(row.suggestedPrice, "TRY")}
+                  </span>
+                </div>
+
+                <div className="card-row profit-row">
+                  <span className="card-label">Kar/Zarar:</span>
+                  <span
+                    className={`profit-loss ${
+                      row.totalAmount - row.costWithOverhead >= 0
+                        ? "positive"
+                        : "negative"
+                    }`}
+                  >
+                    {formatCurrency(
+                      row.totalAmount - row.costWithOverhead,
+                      "TRY"
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              <div className="report-card-footer">
+                <button
+                  className="detail-btn full-width"
+                  onClick={() => openCostDetail(row)}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  Detayları Görüntüle
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+
+        {/* Mobil Özet Kartı */}
+        {filteredData.length > 0 && (
+          <div className="mobile-summary-card">
+            <h3>Genel Toplam</h3>
+            <div className="summary-row">
+              <span className="summary-label">Toplam Adet:</span>
+              <span className="summary-value">
+                {formatNumber(totalQuantity)}
+              </span>
+            </div>
+            <div className="summary-row">
+              <span className="summary-label">Toplam Tutar:</span>
+              <span className="summary-value amount">
+                {formatCurrency(totalAmount, "TRY")}
+              </span>
+            </div>
+            <div className="summary-row">
+              <span className="summary-label">Toplam Maliyet:</span>
+              <span className="summary-value cost">
+                {formatCurrency(totalCost, "TRY")}
+              </span>
+            </div>
+            <div className="summary-row">
+              <span className="summary-label">Genel Gider Dahil:</span>
+              <span className="summary-value" style={{ color: "#667eea" }}>
+                {formatCurrency(totalCostWithOverhead, "TRY")}
+              </span>
+            </div>
+            <div className="summary-row total">
+              <span className="summary-label">Kar/Zarar:</span>
+              <span
+                className={`summary-value profit-loss ${
+                  totalAmount - totalCostWithOverhead >= 0
+                    ? "positive"
+                    : "negative"
+                }`}
+              >
+                {formatCurrency(totalAmount - totalCostWithOverhead, "TRY")}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Maliyet Detay Modalı */}
@@ -984,7 +1342,7 @@ const Reports: React.FC = () => {
                 <h2>Maliyet Detayları</h2>
                 <div className="cost-detail-info">
                   <span className="info-badge firm">
-                    {costDetailModal.firmCode} - {costDetailModal.firmName}
+                    {costDetailModal.firmName}
                   </span>
                   <span className="info-badge model">
                     Model: {costDetailModal.modelCode}
@@ -1037,16 +1395,34 @@ const Reports: React.FC = () => {
                       },
                       {} as Record<string, typeof costDetailModal.costs>
                     );
-
-                    console.log("🔍 Grouped by Workshop:", groupedByWorkshop);
-                    console.log(
-                      "📋 Total costs count:",
-                      costDetailModal.costs.length
-                    );
-
                     const workshopNames = Object.keys(groupedByWorkshop);
                     const grandTotal = costDetailModal.costs.reduce(
                       (sum, c) => sum + convertCostToTRY(c),
+                      0
+                    );
+
+                    // Backend'den gelen costWithOverhead ve finalCostWithProfit değerlerini topla
+                    const grandTotalWithOverhead = costDetailModal.costs.reduce(
+                      (sum, c) => {
+                        if (c.costWithOverhead) {
+                          // costWithOverhead'i TL'ye çevir
+                          return sum + convertCostWithOverheadToTRY(c);
+                        }
+                        // Eğer costWithOverhead yoksa, totalCost'u TL'ye çevir
+                        return sum + convertCostToTRY(c);
+                      },
+                      0
+                    );
+
+                    const grandTotalWithProfit = costDetailModal.costs.reduce(
+                      (sum, c) => {
+                        if (c.finalCostWithProfit) {
+                          // finalCostWithProfit'i TL'ye çevir
+                          return sum + convertFinalCostToTRY(c);
+                        }
+                        // Eğer finalCostWithProfit yoksa, totalCost'u TL'ye çevir
+                        return sum + convertCostToTRY(c);
+                      },
                       0
                     );
 
@@ -1107,6 +1483,7 @@ const Reports: React.FC = () => {
                                       <th className="text-right">
                                         TL Karşılığı
                                       </th>
+                                      <th>Detay/Not</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -1156,6 +1533,46 @@ const Reports: React.FC = () => {
                                             <span className="try-value">
                                               {formatCurrency(tryAmount, "TRY")}
                                             </span>
+                                            {cost.currency !== "TRY" &&
+                                              (cost.usdRate ||
+                                                cost.eurRate) && (
+                                                <div
+                                                  style={{
+                                                    fontSize: "11px",
+                                                    color: "#666",
+                                                    marginTop: "4px",
+                                                  }}
+                                                >
+                                                  Kur:{" "}
+                                                  {cost.currency === "USD"
+                                                    ? cost.usdRate?.toFixed(4)
+                                                    : cost.currency === "EUR"
+                                                    ? cost.eurRate?.toFixed(4)
+                                                    : "-"}{" "}
+                                                  TL
+                                                </div>
+                                              )}
+                                          </td>
+                                          <td>
+                                            {(cost.notes || cost.usage) && (
+                                              <div style={{ fontSize: "12px" }}>
+                                                {cost.notes && (
+                                                  <div
+                                                    style={{
+                                                      color: "#666",
+                                                      fontStyle: "italic",
+                                                    }}
+                                                  >
+                                                    {cost.notes}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )}
+                                            {!cost.notes && !cost.usage && (
+                                              <span style={{ color: "#999" }}>
+                                                -
+                                              </span>
+                                            )}
                                           </td>
                                         </tr>
                                       );
@@ -1177,6 +1594,46 @@ const Reports: React.FC = () => {
                               {formatCurrency(grandTotal, "TRY")}
                             </span>
                           </div>
+                          <div
+                            className="grand-total-row"
+                            style={{
+                              background: "#f8f9fe",
+                              borderTop: "1px solid #e0e7ff",
+                            }}
+                          >
+                            <span
+                              className="grand-total-label"
+                              style={{ color: "#667eea" }}
+                            >
+                              GENEL GİDER DAHİL
+                            </span>
+                            <span
+                              className="grand-total-value"
+                              style={{ color: "#667eea" }}
+                            >
+                              {formatCurrency(grandTotalWithOverhead, "TRY")}
+                            </span>
+                          </div>
+                          <div
+                            className="grand-total-row"
+                            style={{
+                              background: "#f8f9fe",
+                              borderTop: "1px solid #e0e7ff",
+                            }}
+                          >
+                            <span
+                              className="grand-total-label"
+                              style={{ color: "#764ba2" }}
+                            >
+                              KAR DAHİL (NİHAİ MALİYET)
+                            </span>
+                            <span
+                              className="grand-total-value"
+                              style={{ color: "#764ba2" }}
+                            >
+                              {formatCurrency(grandTotalWithProfit, "TRY")}
+                            </span>
+                          </div>
                           {costDetailModal.quantity > 0 && (
                             <div className="grand-total-row unit">
                               <span className="grand-total-label">
@@ -1184,7 +1641,8 @@ const Reports: React.FC = () => {
                               </span>
                               <span className="grand-total-value">
                                 {formatCurrency(
-                                  grandTotal / costDetailModal.quantity,
+                                  grandTotalWithOverhead /
+                                    costDetailModal.quantity,
                                   "TRY"
                                 )}
                               </span>
@@ -1206,6 +1664,15 @@ const Reports: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Teknik Seçim Modalı */}
+      <TechnicModal
+        isOpen={showTechnicModal}
+        onClose={() => setShowTechnicModal(false)}
+        onSelectTechnic={handleTechnicSelect}
+        selectedTechnics={selectedTechnics}
+        onClearAll={handleClearTechnics}
+      />
     </div>
   );
 };

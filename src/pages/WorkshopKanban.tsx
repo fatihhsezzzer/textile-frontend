@@ -16,18 +16,18 @@ import {
 import {
   orderService,
   workshopService,
-  operatorService,
-  exchangeRateService,
+  userService,
   costService,
 } from "../services/dataService";
 import {
   Order,
   Workshop,
-  Operator,
+  User,
   OrderStatus,
   OrderWorkshopCost,
 } from "../types";
 import { useAuth } from "../context/AuthContext";
+import { useExchangeRates } from "../context/ExchangeRateContext";
 import { useNavigate } from "react-router-dom";
 import PageLoader from "../components/PageLoader";
 import "./Kanban.css";
@@ -37,22 +37,17 @@ import WorkshopTransferModal from "../components/WorkshopTransferModal";
 
 const WorkshopKanban: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const { usdRate, eurRate, gbpRate } = useExchangeRates();
   const navigate = useNavigate();
   const kanbanBoardRef = useRef<HTMLDivElement>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
-  const [operators, setOperators] = useState<Operator[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [orderDurations, setOrderDurations] = useState<{
     [orderId: string]: string;
   }>({});
-  const [exchangeRates, setExchangeRates] = useState<{
-    USD: number | null;
-    EUR: number | null;
-    GBP: number | null;
-    date: string;
-  }>({ USD: null, EUR: null, GBP: null, date: new Date().toISOString() });
 
   // Transfer modalı için state'ler (operatör + maliyet)
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -62,7 +57,7 @@ const WorkshopKanban: React.FC = () => {
     oldWorkshopId: string | undefined;
     orderQuantity?: number;
   } | null>(null);
-  const [selectedOperatorId, setSelectedOperatorId] = useState<string>("");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   // Mouse wheel ile yatay scroll için handler
   useEffect(() => {
@@ -122,35 +117,8 @@ const WorkshopKanban: React.FC = () => {
       return;
     }
     loadData();
-    loadExchangeRates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, navigate]);
-
-  // Döviz kurlarını yükle
-  const loadExchangeRates = async () => {
-    try {
-      const rates = await exchangeRateService.getLatest();
-      const usdRate = rates.find((rate) => rate.currencyCode === "USD");
-      const eurRate = rates.find((rate) => rate.currencyCode === "EUR");
-      const gbpRate = rates.find((rate) => rate.currencyCode === "GBP");
-
-      setExchangeRates({
-        USD: usdRate?.banknoteSelling || null,
-        EUR: eurRate?.banknoteSelling || null,
-        GBP: gbpRate?.banknoteSelling || null,
-        date: usdRate?.rateDate || new Date().toISOString(),
-      });
-
-      console.log("💱 Döviz kurları yüklendi:", {
-        USD: usdRate?.banknoteSelling,
-        EUR: eurRate?.banknoteSelling,
-        GBP: gbpRate?.banknoteSelling,
-        date: usdRate?.rateDate,
-      });
-    } catch (error) {
-      console.error("❌ Döviz kurları yüklenemedi:", error);
-    }
-  };
 
   // Atölyede geçen süreyi hesapla (workshops data ile)
   const calculateWorkshopDurationWithData = (
@@ -242,17 +210,14 @@ const WorkshopKanban: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [ordersData, workshopsData, operatorsData] = await Promise.all([
+      const [ordersData, workshopsData, usersData] = await Promise.all([
         orderService.getAll(),
         workshopService.getAll(),
-        operatorService.getAll(),
+        userService.getAll(),
       ]);
-      console.log("📋 Loaded orders:", ordersData.length);
-      console.log("🏭 Loaded workshops:", workshopsData.length);
-      console.log("👷 Loaded operators:", operatorsData.length);
       setOrders(ordersData);
       setWorkshops(workshopsData);
-      setOperators(operatorsData);
+      setUsers(usersData);
 
       // Her sipariş için atölye sürelerini hesapla
       const durations: { [orderId: string]: string } = {};
@@ -295,10 +260,10 @@ const WorkshopKanban: React.FC = () => {
 
       // Dövize göre TL'ye çevir
       let priceInTRY = basePrice;
-      if (currency === "USD" && exchangeRates.USD) {
-        priceInTRY = basePrice * exchangeRates.USD;
-      } else if (currency === "EUR" && exchangeRates.EUR) {
-        priceInTRY = basePrice * exchangeRates.EUR;
+      if (currency === "USD" && usdRate) {
+        priceInTRY = basePrice * usdRate;
+      } else if (currency === "EUR" && eurRate) {
+        priceInTRY = basePrice * eurRate;
       } else if (currency !== "TRY" && currency !== "TL") {
         priceInTRY = 0; // Kur yoksa dönüşüm yapılamaz
       }
@@ -314,7 +279,6 @@ const WorkshopKanban: React.FC = () => {
     const order = orders.find((o) => o.orderId === active.id);
     if (order) {
       setActiveOrder(order);
-      console.log("🎯 Drag started:", order.orderId);
     }
   };
 
@@ -326,17 +290,11 @@ const WorkshopKanban: React.FC = () => {
     setTimeout(() => setActiveOrder(null), 100);
 
     if (!over) {
-      console.log("❌ Dropped outside valid area");
       return;
     }
 
     const draggedOrderId = active.id as string;
     const targetId = over.id as string;
-
-    console.log(
-      `📍 Drop detected - Dragged: ${draggedOrderId}, Target: ${targetId}`
-    );
-
     const draggedOrder = orders.find((o) => o.orderId === draggedOrderId);
 
     if (!draggedOrder) {
@@ -350,14 +308,12 @@ const WorkshopKanban: React.FC = () => {
     // Eğer hedef bir atölye ID'si ise
     if (workshops.some((w) => w.workshopId === targetId)) {
       newWorkshopId = targetId;
-      console.log("🎯 Dropped on workshop:", newWorkshopId);
     }
     // Eğer hedef başka bir kart ise, o kartın atölyesini al
     else {
       const targetOrder = orders.find((o) => o.orderId === targetId);
       if (targetOrder && targetOrder.workshopId) {
         newWorkshopId = targetOrder.workshopId;
-        console.log("🎯 Dropped on card, target workshop:", newWorkshopId);
       }
     }
 
@@ -367,7 +323,6 @@ const WorkshopKanban: React.FC = () => {
     }
 
     if (draggedOrder.workshopId === newWorkshopId) {
-      console.log("ℹ️ Same workshop, no update needed");
       return;
     }
 
@@ -377,20 +332,20 @@ const WorkshopKanban: React.FC = () => {
       } to ${newWorkshopId}`
     );
 
-    // Transfer modalını aç (operatör + maliyet)
+    // Transfer modalını aç (kullanıcı + maliyet)
     setPendingWorkshopChange({
       orderId: draggedOrderId,
       newWorkshopId,
       oldWorkshopId: draggedOrder.workshopId,
       orderQuantity: draggedOrder.quantity,
     });
-    setSelectedOperatorId(draggedOrder.operatorId || "");
+    setSelectedUserId(draggedOrder.operatorId || "");
     setShowTransferModal(true);
   };
 
   // Transfer modalından gelen operatör + maliyet kaydet
   const handleTransferSave = async (
-    operatorId: string,
+    userId: string,
     costs: Omit<
       OrderWorkshopCost,
       | "orderWorkshopCostId"
@@ -431,8 +386,6 @@ const WorkshopKanban: React.FC = () => {
     try {
       // Maliyetleri kaydet (varsa)
       if (costs.length > 0 && oldWorkshopId && draggedOrder.modelId) {
-        console.log("💾 Saving costs for model:", draggedOrder.modelId);
-
         for (const cost of costs) {
           const modelCostData = {
             modelId: draggedOrder.modelId,
@@ -446,14 +399,16 @@ const WorkshopKanban: React.FC = () => {
             unit3: cost.unit3, // Üçüncü birim (opsiyonel, referans)
             costUnitId3: cost.costUnitId3, // Üçüncü birim ID (referans)
             unitPrice: cost.actualPrice,
+            totalCost: cost.totalCost, // CustomCost için direkt toplam tutar
             currency: cost.currency,
-            usage: cost.notes || `${previousWorkshop?.name || "Atölyesi"}`, // Önceki atölye
+            usage: `${previousWorkshop?.name || "Atölyesi"}`, // Önceki atölye
+            notes: cost.notes || "", // Not alanı
             priority: 1,
             isActive: true,
-            usdRate: exchangeRates.USD || undefined,
-            eurRate: exchangeRates.EUR || undefined,
-            gbpRate: exchangeRates.GBP || undefined,
-            exchangeRateDate: exchangeRates.date,
+            usdRate: usdRate || undefined,
+            eurRate: eurRate || undefined,
+            gbpRate: gbpRate || undefined,
+            exchangeRateDate: new Date().toISOString(),
           };
 
           console.log("📤 Sending ModelCost data (API):", modelCostData);
@@ -466,7 +421,6 @@ const WorkshopKanban: React.FC = () => {
             );
           }
         }
-        console.log("✅ Model costs saved");
       }
 
       // Status güncelleme mantığı
@@ -489,39 +443,33 @@ const WorkshopKanban: React.FC = () => {
         newStatus = OrderStatus.Islemde;
       }
 
-      // Sonra workshop ve operator'u güncelle
+      // Sonra workshop ve user'ı güncelle
       // Yeni atama endpointi için payload
       const assignPayload = {
         workshopId: newWorkshopId,
-        operatorId: operatorId,
+        userId: userId,
         orderStatusId: newStatus,
       };
       console.log("📤 Sending Order assign data (API):", assignPayload);
       await orderService.assign(orderId, assignPayload);
-      console.log("✅ Workshop, operator and status assigned successfully");
-
       // UI'ı güncelle
       await loadData();
 
       // Modal'ı kapat
       setShowTransferModal(false);
       setPendingWorkshopChange(null);
-      setSelectedOperatorId("");
+      setSelectedUserId("");
 
-      const operator = operators.find((op) => op.operatorId === operatorId);
-      const operatorName = operator
-        ? `${operator.firstName} ${operator.lastName}`
-        : "";
+      const user = users.find((u) => u.userId === userId);
+      const userName = user ? `${user.firstName} ${user.lastName}` : "";
 
       let message = newWorkshopId
-        ? `Sipariş "${targetWorkshop?.name}" atölyesine ve "${operatorName}" operatörüne atandı`
+        ? `Sipariş "${targetWorkshop?.name}" atölyesine ve "${userName}" kullanıcısına atandı`
         : "Sipariş atölyeden kaldırıldı";
 
       if (isMoveToCompleted) {
         message += " ve tamamlandı olarak işaretlendi! 🎉";
       }
-
-      console.log("🎉", message);
     } catch (error: any) {
       console.error("❌ Failed to update workshop:", error);
 
@@ -550,7 +498,7 @@ const WorkshopKanban: React.FC = () => {
   const handleTransferCancel = () => {
     setShowTransferModal(false);
     setPendingWorkshopChange(null);
-    setSelectedOperatorId("");
+    setSelectedUserId("");
   };
 
   const formatDate = (dateString?: string) => {
@@ -570,7 +518,7 @@ const WorkshopKanban: React.FC = () => {
   }));
 
   return (
-    <div className="kanban-container">
+    <div className="kanban-container workshop-kanban-page">
       <div className="kanban-header">
         <h1>🏭 Atölye Kanban Board</h1>
       </div>
@@ -681,11 +629,9 @@ const WorkshopKanban: React.FC = () => {
               (w) => w.workshopId === pendingWorkshopChange.newWorkshopId
             )?.name || "Yeni Atölye"
           }
-          operators={operators.filter(
-            (op) => op.workshopId === pendingWorkshopChange.oldWorkshopId
-          )}
-          selectedOperatorId={selectedOperatorId}
-          onOperatorChange={setSelectedOperatorId}
+          users={users}
+          selectedUserId={selectedUserId}
+          onUserChange={setSelectedUserId}
           onClose={handleTransferCancel}
           onSave={handleTransferSave}
         />

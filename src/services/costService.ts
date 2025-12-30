@@ -1,7 +1,6 @@
 import {
   CostCategory,
   CostItem,
-  CostUnit,
   ModelCost,
   ModelCostSummary,
   WorkshopCostItem,
@@ -12,26 +11,6 @@ import { apiRequest } from "./api";
 const API_BASE = "/Cost";
 
 export const costService = {
-  // Cost Units - GET /api/Cost/units, POST /api/Cost/units
-  getCostUnits: async (): Promise<CostUnit[]> => {
-    return apiRequest(`${API_BASE}/units`);
-  },
-
-  createCostUnit: async (
-    unit: Omit<
-      CostUnit,
-      "costUnitId" | "createdAt" | "createdBy" | "updatedAt" | "updatedBy"
-    >
-  ): Promise<CostUnit> => {
-    return apiRequest(`${API_BASE}/units`, {
-      method: "POST",
-      body: JSON.stringify(unit),
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-  },
-
   // Cost Categories - GET /api/Cost/categories, POST /api/Cost/categories
   getCostCategories: async (): Promise<CostCategory[]> => {
     return apiRequest(`${API_BASE}/categories`);
@@ -242,8 +221,14 @@ export const costService = {
     return item;
   },
 
-  updateCostItem: async (id: string, costItem: CostItem): Promise<CostItem> => {
-    throw new Error("Cost item update not supported by backend");
+  updateCostItem: async (id: string, costItem: CostItem): Promise<void> => {
+    return apiRequest(`${API_BASE}/items/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(costItem),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
   },
 
   deleteCostItem: async (id: string): Promise<void> => {

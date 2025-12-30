@@ -10,6 +10,9 @@ export interface LoginResponse {
   userId: string;
   firstName: string;
   lastName: string;
+  workshopId?: string;
+  workshop?: Workshop;
+  isFirstLogin?: boolean;
   user?: User; // Opsiyonel, eski format desteği için
 }
 
@@ -34,6 +37,7 @@ export enum CalculationType {
   MeterBased = 3, // Metre bazlı hesaplama
   AreaBased = 4, // Alan bazlı (m²) hesaplama
   PaintBased = 5, // Boya hesaplama - Litre × Çeşit Sayısı × Kat Sayısı
+  CustomCost = 6, // Özel Maliyet - TotalCost direkt girilir (Fason üretim, sabit maliyetler)
 }
 
 export interface ExchangeRate {
@@ -81,12 +85,17 @@ export interface User {
   lastName: string;
   email: string;
   role: string;
+  workshopId?: string;
+  workshop?: Workshop;
+  isActive: boolean;
 }
 
 export interface Model {
   modelId: string;
   modelCode: string;
   modelName: string;
+  firmId?: string; // Firma ID'si
+  patternCode?: string; // Desen kodu
   description?: string;
   category?: string;
   season?: string;
@@ -125,6 +134,7 @@ export interface Workshop {
   location?: string;
   contactPerson?: string;
   phone?: string;
+  displayOrder?: number;
 }
 
 export interface Operator {
@@ -164,6 +174,7 @@ export interface Order {
   orderId: string;
   acceptanceDate: string; // Backend: AcceptanceDate
   modelistUserId?: string; // Modelist assignment for digital/sticket orders
+  modelistUser?: User; // Navigation property for modelist user
   completionDate?: string; // Backend: CompletionDate (nullable)
   firmId: string; // Backend: FirmId
   firm?: Firm; // Navigation property
@@ -198,19 +209,6 @@ export interface Order {
 }
 
 // Cost Management Types
-export interface CostUnit {
-  costUnitId: string;
-  unitCode: string;
-  unitName: string;
-  description?: string;
-  displayOrder: number;
-  isActive: boolean;
-  createdAt: string;
-  createdBy: string;
-  updatedAt?: string;
-  updatedBy?: string;
-}
-
 export interface CostCategory {
   costCategoryId: string;
   category: string; // Backend expects 'category' field
@@ -259,9 +257,6 @@ export interface CostItem {
   quantity3Label?: string; // 3. miktar başlığı ("Sipariş Adedi", "Adet")
   // Navigation properties
   costCategory?: CostCategory;
-  costUnit?: CostUnit; // Navigation property - Birinci birim
-  costUnit2?: CostUnit; // Navigation property - İkinci birim
-  costUnit3?: CostUnit; // Navigation property - Üçüncü birim (referans)
 }
 
 export interface ModelCost {
@@ -299,11 +294,20 @@ export interface ModelCost {
   eurRate?: number; // EUR kuru (maliyet kaydedildiği andaki kur)
   gbpRate?: number; // GBP kuru (maliyet kaydedildiği andaki kur)
   exchangeRateDate?: string; // Kur tarihi
+  createdAt?: string; // Kayıt oluşturulma tarihi
+  // Settings-based pricing calculations
+  overheadCostRate?: number; // Genel gider oranı (%)
+  profitMargin?: number; // Kar marjı (%)
+  costWithOverhead?: number; // Genel gider eklenmiş maliyet
+  finalCostWithProfit?: number; // Kar marjı eklenmiş nihai maliyet
+  // PaintBased calculation type için özel alanlar
+  layerCount?: number; // Kat sayısı (PaintBased için)
+  applicationMethod?: string; // Uygulama yöntemi (PaintBased için)
+  // AreaBased calculation type için özel alan
+  coverageArea?: number; // Kaplama alanı (AreaBased için)
   model?: Model; // Geriye dönük uyumluluk için
   order?: Order; // Geriye dönük uyumluluk için
   costItem?: CostItem; // Geriye dönük uyumluluk için
-  costUnit2?: CostUnit; // Geriye dönük uyumluluk için
-  costUnit3?: CostUnit; // Geriye dönük uyumluluk için
 }
 
 export interface ModelCostSummary {
@@ -395,4 +399,16 @@ export interface OrderWorkshopCost {
   order?: Order;
   workshop?: Workshop;
   costItem?: CostItem;
+}
+
+export interface Settings {
+  settingsId: string;
+  settingsName: string;
+  profitMargin: number; // Kar marjı (%)
+  overheadCostRate: number; // Genel gider oranı (%)
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string;
+  updatedAt?: string;
+  updatedBy?: string;
 }

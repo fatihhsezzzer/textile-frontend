@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { authService } from "../services/authService";
+import { workshopService } from "../services/dataService";
+import { Workshop } from "../types";
 import "./Register.css";
 
 interface RegisterForm {
@@ -12,12 +14,14 @@ interface RegisterForm {
   firstName: string;
   lastName: string;
   role: string;
+  workshopId: string;
 }
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
   const { user, isLoading } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [formData, setFormData] = useState<RegisterForm>({
     username: "",
     email: "",
@@ -26,9 +30,30 @@ const Register: React.FC = () => {
     firstName: "",
     lastName: "",
     role: "Üretim", // Varsayılan rol
+    workshopId: "",
   });
 
   const [errors, setErrors] = useState<Partial<RegisterForm>>({});
+
+  // Atölyeleri yükle
+  useEffect(() => {
+    const loadWorkshops = async () => {
+      try {
+        const data = await workshopService.getAll();
+        // Atölyeleri displayOrder'a göre sırala
+        const sortedData = [...data].sort((a, b) => {
+          const orderA = a.displayOrder ?? 999;
+          const orderB = b.displayOrder ?? 999;
+          if (orderA !== orderB) return orderA - orderB;
+          return a.name.localeCompare(b.name, "tr");
+        });
+        setWorkshops(sortedData);
+      } catch (error) {
+        console.error("Atölyeler yüklenemedi:", error);
+      }
+    };
+    loadWorkshops();
+  }, []);
 
   // Yetki kontrolü - Manager değilse anında yönlendir
   useEffect(() => {
@@ -86,6 +111,14 @@ const Register: React.FC = () => {
       newErrors.lastName = "Soyad gereklidir";
     }
 
+    // Üretim ve Desinatör rolleri için atölye seçimi zorunlu
+    if (
+      (formData.role === "Üretim" || formData.role === "Modelist") &&
+      !formData.workshopId
+    ) {
+      newErrors.workshopId = "Bu rol için atölye seçimi zorunludur";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -97,6 +130,10 @@ const Register: React.FC = () => {
     setFormData((prev) => ({
       ...prev,
       [name]: value,
+      // Rol değiştiğinde ve seçilen rol Üretim veya Modelist değilse, workshopId'yi temizle
+      ...(name === "role" &&
+        value !== "Üretim" &&
+        value !== "Modelist" && { workshopId: "" }),
     }));
 
     // Clear error when user starts typing
@@ -125,6 +162,7 @@ const Register: React.FC = () => {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         role: formData.role,
+        workshopId: formData.workshopId || undefined,
         isActive: true,
         createdBy: user?.userId || "unknown",
       };
@@ -144,6 +182,7 @@ const Register: React.FC = () => {
         firstName: "",
         lastName: "",
         role: "Üretim",
+        workshopId: "",
       });
     } catch (error: any) {
       console.error("❌ Kullanıcı oluşturma hatası:", error);
@@ -161,6 +200,7 @@ const Register: React.FC = () => {
     { value: "Sekreterya", label: "Sekreterya" },
     { value: "Manager", label: "Manager" },
     { value: "Modelist", label: "Desinatör" },
+    { value: "Muhasebeci", label: "Muhasebeci" },
   ];
 
   return (
@@ -278,6 +318,28 @@ const Register: React.FC = () => {
               ))}
             </select>
           </div>
+
+          {/* Atölye seçimi Üretim ve Desinatör rolleri için */}
+          {(formData.role === "Üretim" || formData.role === "Modelist") && (
+            <div className="form-group">
+              <label htmlFor="workshopId">Atölye *</label>
+              <select
+                id="workshopId"
+                name="workshopId"
+                value={formData.workshopId}
+                onChange={handleInputChange}
+                className="role-select"
+                required
+              >
+                <option value="">-- Atölye Seçiniz --</option>
+                {workshops.map((workshop) => (
+                  <option key={workshop.workshopId} value={workshop.workshopId}>
+                    {workshop.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="form-actions">
             <button

@@ -40,7 +40,6 @@ const ImageManager: React.FC<ImageManagerProps> = ({ orderId, onClose }) => {
     try {
       setUploading(true);
       const result = await orderService.uploadImages(orderId, files);
-      console.log("Upload result:", result);
       await loadImages(); // Refresh the image list
       alert(`${result.images.length} resim başarıyla yüklendi!`);
     } catch (error) {

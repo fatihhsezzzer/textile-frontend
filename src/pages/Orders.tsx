@@ -6,11 +6,15 @@ import {
   orderService,
   firmService,
   workshopService,
-  exchangeRateService,
 } from "../services/dataService";
 import { useAuth } from "../context/AuthContext";
+import { useExchangeRates } from "../context/ExchangeRateContext";
 import ImageManager from "../components/ImageManager";
-import { formatCurrency, formatNumber } from "../utils/formatters";
+import {
+  formatCurrency,
+  formatNumber,
+  turkishIncludes,
+} from "../utils/formatters";
 import PageLoader from "../components/PageLoader";
 import "./Orders.css";
 
@@ -43,13 +47,6 @@ const Orders: React.FC = () => {
   >([]);
   const [firms, setFirms] = useState<Firm[]>([]);
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
-  const [exchangeRates, setExchangeRates] = useState<{
-    usd: number | null;
-    eur: number | null;
-  }>({
-    usd: null,
-    eur: null,
-  });
 
   // QR Print Modal state
   const [qrPrintModal, setQrPrintModal] = useState<{
@@ -67,9 +64,13 @@ const Orders: React.FC = () => {
     key: null,
     direction: "asc",
   });
+  const [expandedTechnics, setExpandedTechnics] = useState<Set<string>>(
+    new Set()
+  );
 
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { usdRate, eurRate } = useExchangeRates();
 
   // QR Modal'ı aç
   const handleShowQrModal = async (order: Order) => {
@@ -98,7 +99,6 @@ const Orders: React.FC = () => {
   useEffect(() => {
     loadFirms();
     loadWorkshops();
-    loadExchangeRates();
   }, []);
 
   // Exchange rates, orders veya summaryDateFilter değiştiğinde summary'i yeniden hesapla
@@ -107,33 +107,12 @@ const Orders: React.FC = () => {
       setStatusSummary(calculateStatusSummary(orders));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exchangeRates, orders, summaryDateFilter]);
-
-  const loadExchangeRates = async () => {
-    try {
-      const rates = await exchangeRateService.getLatest();
-      const usdRate = rates.find((rate) => rate.currencyCode === "USD");
-      const eurRate = rates.find((rate) => rate.currencyCode === "EUR");
-
-      setExchangeRates({
-        usd: usdRate ? usdRate.banknoteSelling : null,
-        eur: eurRate ? eurRate.banknoteSelling : null,
-      });
-    } catch (error) {
-      console.error("❌ Kur bilgisi yüklenemedi:", error);
-    }
-  };
+  }, [usdRate, eurRate, orders, summaryDateFilter]);
 
   const loadOrders = async () => {
     try {
       setLoading(true);
       const data = await orderService.getAll();
-
-      console.log("📦 Orders loaded from API:", data);
-      console.log("📊 Total orders count:", data.length);
-      if (data.length > 0) {
-        console.log("📋 Sample order structure:", data[0]);
-      }
 
       // Siparişleri oluşturulma tarihine göre tersten sırala (en yeni en üstte)
       const sortedData = [...data].sort((a, b) => {
@@ -145,6 +124,14 @@ const Orders: React.FC = () => {
       setAllOrders(sortedData); // Tüm siparişleri kaydet
 
       let filteredData = sortedData;
+
+      // Manager olmayan kullanıcılar sadece kendi atölyelerindeki işleri görebilir
+      if (user && user.role !== "Manager" && user.workshopId) {
+        filteredData = filteredData.filter(
+          (order) => order.workshopId === user.workshopId
+        );
+      }
+
       if (statusFilter !== "all") {
         filteredData = filteredData.filter(
           (order) => order.status === statusFilter
@@ -241,10 +228,10 @@ const Orders: React.FC = () => {
         let priceInTRY = totalPrice;
         const currency = order.priceCurrency || order.currency || "TRY";
 
-        if (currency === "USD" && exchangeRates.usd) {
-          priceInTRY = totalPrice * exchangeRates.usd;
-        } else if (currency === "EUR" && exchangeRates.eur) {
-          priceInTRY = totalPrice * exchangeRates.eur;
+        if (currency === "USD" && usdRate) {
+          priceInTRY = totalPrice * usdRate;
+        } else if (currency === "EUR" && eurRate) {
+          priceInTRY = totalPrice * eurRate;
         }
 
         summary[statusKey].TotalValue += priceInTRY;
@@ -274,20 +261,6 @@ const Orders: React.FC = () => {
       setWorkshops(data);
     } catch (error) {
       console.error("❌ Failed to load workshops:", error);
-    }
-  };
-
-  const handleDeleteOrder = async (orderId: string) => {
-    if (!window.confirm("Bu siparişi silmek istediğinizden emin misiniz?"))
-      return;
-
-    try {
-      await orderService.delete(orderId);
-      alert("Sipariş başarıyla silindi!");
-      loadOrders();
-    } catch (error: any) {
-      console.error("❌ Failed to delete order:", error);
-      alert("Sipariş silinemedi!");
     }
   };
 
@@ -378,6 +351,14 @@ const Orders: React.FC = () => {
             ? `${b.operator.firstName} ${b.operator.lastName}`
             : "";
           break;
+        case "modelist":
+          aValue = a.modelistUser
+            ? `${a.modelistUser.firstName} ${a.modelistUser.lastName}`
+            : "";
+          bValue = b.modelistUser
+            ? `${b.modelistUser.firstName} ${b.modelistUser.lastName}`
+            : "";
+          break;
         case "status":
           aValue = a.status || 0;
           bValue = b.status || 0;
@@ -419,18 +400,20 @@ const Orders: React.FC = () => {
   const getFilteredOrders = (ordersToFilter: Order[]) => {
     if (!searchTerm.trim()) return ordersToFilter;
 
-    const term = searchTerm.toLowerCase().trim();
     return ordersToFilter.filter((order) => {
       return (
-        (order.firm?.firmName || "").toLowerCase().includes(term) ||
-        (order.model?.modelName || "").toLowerCase().includes(term) ||
-        (order.model?.modelCode || "").toLowerCase().includes(term) ||
-        (order.workshop?.name || "").toLowerCase().includes(term) ||
-        (order.operator?.firstName || "").toLowerCase().includes(term) ||
-        (order.operator?.lastName || "").toLowerCase().includes(term) ||
-        getStatusText(order.status).toLowerCase().includes(term) ||
-        order.quantity?.toString().includes(term) ||
-        order.price?.toString().includes(term)
+        turkishIncludes(order.orderId || "", searchTerm) ||
+        turkishIncludes(order.firm?.firmName || "", searchTerm) ||
+        turkishIncludes(order.model?.modelName || "", searchTerm) ||
+        turkishIncludes(order.model?.modelCode || "", searchTerm) ||
+        turkishIncludes(order.workshop?.name || "", searchTerm) ||
+        turkishIncludes(order.operator?.firstName || "", searchTerm) ||
+        turkishIncludes(order.operator?.lastName || "", searchTerm) ||
+        turkishIncludes(order.modelistUser?.firstName || "", searchTerm) ||
+        turkishIncludes(order.modelistUser?.lastName || "", searchTerm) ||
+        turkishIncludes(getStatusText(order.status), searchTerm) ||
+        order.quantity?.toString().includes(searchTerm.trim()) ||
+        order.price?.toString().includes(searchTerm.trim())
       );
     });
   };
@@ -452,19 +435,7 @@ const Orders: React.FC = () => {
 
   return (
     <div className="orders-container">
-      {/* Sayfa Başlığı ve Yeni Sipariş Butonu */}
-      <div className="orders-header">
-        <h1>Siparişler</h1>
-        <button
-          className="create-button"
-          onClick={() => navigate("/orders/new")}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-          </svg>
-          Yeni Sipariş
-        </button>
-      </div>
+      {/* Sayfa Başlığı */}
 
       {/* Durum Özeti - Sadece Manager için */}
       {user?.role === "Manager" && (
@@ -490,103 +461,106 @@ const Orders: React.FC = () => {
         </div>
       )}
 
-      <div className="filters">
-        <div className="filter-group">
-          <label>Arama:</label>
-          <input
-            type="text"
-            placeholder="Firma, model, atölye, operatör ara..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-        </div>
+      {user?.role === "Manager" && (
+        <div className="filters">
+          <div className="filter-group">
+            <label>Arama:</label>
+            <input
+              type="text"
+              placeholder="Order ID, Firma, model, atölye, operatör, desinatör ara..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+            />
+          </div>
 
-        <div className="filter-group">
-          <label>Durum:</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              const newStatus =
-                e.target.value === "all"
-                  ? "all"
-                  : (parseInt(e.target.value) as OrderStatus);
-              setStatusFilter(newStatus);
-              // Status değiştiğinde tarih filtrelerini sıfırla
-              if (newStatus !== OrderStatus.Tamamlandi) {
-                setDateFilter({ startDate: "", endDate: "" });
-              }
-            }}
-          >
-            <option value="all">Tümü</option>
-            <option value={OrderStatus.Atanmadi}>Atanmadı</option>
-            <option value={OrderStatus.Islemde}>İşlemde</option>
-            <option value={OrderStatus.Tamamlandi}>Tamamlandı</option>
-            <option value={OrderStatus.IptalEdildi}>İptal Edildi</option>
-          </select>
-        </div>
-
-        <div className="filter-group">
-          <label>Firma:</label>
-          <select
-            value={firmFilter}
-            onChange={(e) => setFirmFilter(e.target.value)}
-          >
-            <option value="all">Tüm Firmalar</option>
-            {firms.map((firm) => (
-              <option key={firm.firmId} value={firm.firmId}>
-                {firm.firmName}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="filter-group">
-          <label>Atölye:</label>
-          <select
-            value={workshopFilter}
-            onChange={(e) => setWorkshopFilter(e.target.value)}
-          >
-            <option value="all">Tüm Atölyeler</option>
-            {workshops.map((workshop) => (
-              <option key={workshop.workshopId} value={workshop.workshopId}>
-                {workshop.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Tarih filtreleri - sadece "Tamamlandı" statusunda görünür */}
-        {statusFilter === OrderStatus.Tamamlandi && (
-          <>
-            <div className="filter-group">
-              <label>Başlangıç Tarihi:</label>
-              <input
-                type="date"
-                value={dateFilter.startDate}
-                onChange={(e) =>
-                  setDateFilter({ ...dateFilter, startDate: e.target.value })
+          <div className="filter-group">
+            <label>Durum:</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                const newStatus =
+                  e.target.value === "all"
+                    ? "all"
+                    : (parseInt(e.target.value) as OrderStatus);
+                setStatusFilter(newStatus);
+                // Status değiştiğinde tarih filtrelerini sıfırla
+                if (newStatus !== OrderStatus.Tamamlandi) {
+                  setDateFilter({ startDate: "", endDate: "" });
                 }
-              />
-            </div>
-            <div className="filter-group">
-              <label>Bitiş Tarihi:</label>
-              <input
-                type="date"
-                value={dateFilter.endDate}
-                onChange={(e) =>
-                  setDateFilter({ ...dateFilter, endDate: e.target.value })
-                }
-              />
-            </div>
-          </>
-        )}
-      </div>
+              }}
+            >
+              <option value="all">Tümü</option>
+              <option value={OrderStatus.Atanmadi}>Atanmadı</option>
+              <option value={OrderStatus.Islemde}>İşlemde</option>
+              <option value={OrderStatus.Tamamlandi}>Tamamlandı</option>
+              <option value={OrderStatus.IptalEdildi}>İptal Edildi</option>
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label>Firma:</label>
+            <select
+              value={firmFilter}
+              onChange={(e) => setFirmFilter(e.target.value)}
+            >
+              <option value="all">Tüm Firmalar</option>
+              {firms.map((firm) => (
+                <option key={firm.firmId} value={firm.firmId}>
+                  {firm.firmName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label>Atölye:</label>
+            <select
+              value={workshopFilter}
+              onChange={(e) => setWorkshopFilter(e.target.value)}
+            >
+              <option value="all">Tüm Atölyeler</option>
+              {workshops.map((workshop) => (
+                <option key={workshop.workshopId} value={workshop.workshopId}>
+                  {workshop.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tarih filtreleri - sadece "Tamamlandı" statusunda görünür */}
+          {statusFilter === OrderStatus.Tamamlandi && (
+            <>
+              <div className="filter-group">
+                <label>Başlangıç Tarihi:</label>
+                <input
+                  type="date"
+                  value={dateFilter.startDate}
+                  onChange={(e) =>
+                    setDateFilter({ ...dateFilter, startDate: e.target.value })
+                  }
+                />
+              </div>
+              <div className="filter-group">
+                <label>Bitiş Tarihi:</label>
+                <input
+                  type="date"
+                  value={dateFilter.endDate}
+                  onChange={(e) =>
+                    setDateFilter({ ...dateFilter, endDate: e.target.value })
+                  }
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="orders-table-container">
         <table className="orders-table">
           <thead>
             <tr>
+              <th>Order ID</th>
               <th
                 className="sortable-header"
                 onClick={() => handleSort("firm")}
@@ -622,6 +596,7 @@ const Orders: React.FC = () => {
               </th>
               <th>Birim</th>
               <th>Parça/Takım</th>
+              <th>Teknikler</th>
               {user?.role === "Manager" && (
                 <>
                   <th
@@ -651,10 +626,10 @@ const Orders: React.FC = () => {
               </th>
               <th
                 className="sortable-header"
-                onClick={() => handleSort("operator")}
+                onClick={() => handleSort("modelist")}
               >
-                Operatör
-                {sortConfig.key === "operator" && (
+                Desinatör
+                {sortConfig.key === "modelist" && (
                   <span className="sort-indicator">
                     {sortConfig.direction === "asc" ? " ↑" : " ↓"}
                   </span>
@@ -711,7 +686,7 @@ const Orders: React.FC = () => {
           <tbody>
             {getProcessedOrders().length === 0 ? (
               <tr>
-                <td colSpan={15} style={{ textAlign: "center" }}>
+                <td colSpan={16} style={{ textAlign: "center" }}>
                   {searchTerm.trim()
                     ? "Arama kriterine uygun sipariş bulunamadı."
                     : "Henüz sipariş bulunmuyor."}
@@ -720,7 +695,22 @@ const Orders: React.FC = () => {
             ) : (
               getProcessedOrders().map((order) => (
                 <tr key={order.orderId}>
-                  <td>{order.firm?.firmName || "-"}</td>
+                  <td
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: "11px",
+                      color: "#666",
+                    }}
+                  >
+                    {order.orderId.substring(0, 8)}...
+                  </td>
+                  <td title={order.firm?.firmName || "-"}>
+                    {order.firm?.firmName
+                      ? order.firm.firmName.length > 10
+                        ? order.firm.firmName.substring(0, 10) + "..."
+                        : order.firm.firmName
+                      : "-"}
+                  </td>
                   <td>{order.model?.modelName || "-"}</td>
                   <td>{order.quantity || 0}</td>
                   <td>
@@ -732,6 +722,67 @@ const Orders: React.FC = () => {
                     {order.unit === OrderUnit.Takim && order.pieceCount
                       ? `${order.pieceCount} parça`
                       : "-"}
+                  </td>
+                  <td>
+                    {order.orderTechnics && order.orderTechnics.length > 0 ? (
+                      order.orderTechnics.length <= 3 ? (
+                        <div className="technics-list">
+                          {order.orderTechnics.map((ot, i) => (
+                            <span key={i} className="technic-tag">
+                              {ot.technic?.name || "-"}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="technics-expandable">
+                          {expandedTechnics.has(order.orderId) ? (
+                            <>
+                              <div className="technics-list">
+                                {order.orderTechnics.map((ot, i) => (
+                                  <span key={i} className="technic-tag">
+                                    {ot.technic?.name || "-"}
+                                  </span>
+                                ))}
+                              </div>
+                              <button
+                                className="technics-toggle"
+                                onClick={() => {
+                                  const newSet = new Set(expandedTechnics);
+                                  newSet.delete(order.orderId);
+                                  setExpandedTechnics(newSet);
+                                }}
+                              >
+                                Gizle ▲
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="technics-list">
+                                {order.orderTechnics
+                                  .slice(0, 1)
+                                  .map((ot, i) => (
+                                    <span key={i} className="technic-tag">
+                                      {ot.technic?.name || "-"}
+                                    </span>
+                                  ))}
+                              </div>
+                              <button
+                                className="technics-toggle"
+                                onClick={() => {
+                                  const newSet = new Set(expandedTechnics);
+                                  newSet.add(order.orderId);
+                                  setExpandedTechnics(newSet);
+                                }}
+                              >
+                                +{order.orderTechnics.length - 2} daha ▼
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )
+                    ) : (
+                      <span className="no-technic">-</span>
+                    )}
                   </td>
                   {user?.role === "Manager" && (
                     <>
@@ -745,8 +796,8 @@ const Orders: React.FC = () => {
                   )}
                   <td>{order.workshop?.name || "-"}</td>
                   <td>
-                    {order.operator
-                      ? `${order.operator.firstName} ${order.operator.lastName}`
+                    {order.modelistUser
+                      ? `${order.modelistUser.firstName} ${order.modelistUser.lastName}`
                       : "-"}
                   </td>
                   <td>
@@ -817,6 +868,28 @@ const Orders: React.FC = () => {
                           </svg>
                         </button>
                       )}
+                      {user && user.role !== "Manager" && (
+                        <button
+                          onClick={() =>
+                            navigate(`/orderdetail/${order.orderId}`)
+                          }
+                          className="transfer-button"
+                          title="Transfer"
+                        >
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <polyline points="9 18 15 12 9 6"></polyline>
+                          </svg>
+                        </button>
+                      )}
                       {(user?.role === "Manager" ||
                         user?.role === "Sekreterya") && (
                         <button
@@ -838,29 +911,6 @@ const Orders: React.FC = () => {
                           >
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                          </svg>
-                        </button>
-                      )}
-                      {user?.role === "Manager" && (
-                        <button
-                          onClick={() => handleDeleteOrder(order.orderId)}
-                          className="delete-button"
-                          title="Sil"
-                        >
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                            <line x1="10" y1="11" x2="10" y2="17"></line>
-                            <line x1="14" y1="11" x2="14" y2="17"></line>
                           </svg>
                         </button>
                       )}
@@ -919,8 +969,15 @@ const Orders: React.FC = () => {
           getProcessedOrders().map((order) => (
             <div key={order.orderId} className="order-card">
               <div className="order-card-header">
-                <div className="order-card-title">
-                  {order.firm?.firmName || "Firma bilinmiyor"}
+                <div
+                  className="order-card-title"
+                  title={order.firm?.firmName || "Firma bilinmiyor"}
+                >
+                  {order.firm?.firmName
+                    ? order.firm.firmName.length > 10
+                      ? order.firm.firmName.substring(0, 10) + "..."
+                      : order.firm.firmName
+                    : "Firma bilinmiyor"}
                 </div>
                 <span
                   className={`status-badge order-card-status ${getStatusClass(
@@ -956,6 +1013,15 @@ const Orders: React.FC = () => {
                     {formatDate(order.deadline)}
                   </div>
                 </div>
+                {order.modelistUser && (
+                  <div className="order-card-info-item">
+                    <div className="order-card-info-label">Desinatör</div>
+                    <div className="order-card-info-value">
+                      {order.modelistUser.firstName}{" "}
+                      {order.modelistUser.lastName}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="order-card-actions">
@@ -981,6 +1047,26 @@ const Orders: React.FC = () => {
                       <rect x="3" y="14" width="7" height="7"></rect>
                     </svg>
                     QR
+                  </button>
+                )}
+                {user && user.role !== "Manager" && (
+                  <button
+                    onClick={() => navigate(`/orderdetail/${order.orderId}`)}
+                    className="transfer-button"
+                    title="Transfer"
+                  >
+                    <svg
+                      width="8"
+                      height="8"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
                   </button>
                 )}
                 <button

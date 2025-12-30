@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { CostCategory, CostItem, CostUnit } from "../types";
+import { CostCategory, CostItem } from "../types";
 import { costService } from "../services/dataService";
-import CostUnitModal from "../components/CostUnitModal";
 import { formatCurrency } from "../utils/formatters";
 import PageLoader from "../components/PageLoader";
 import "./CostManagement.css";
@@ -10,16 +9,16 @@ import "./CostManagement.css";
 interface CostManagementProps {}
 
 const CostManagement: React.FC<CostManagementProps> = () => {
-  const [activeTab, setActiveTab] = useState<"categories" | "items" | "units">(
+  const [activeTab, setActiveTab] = useState<"categories" | "items">(
     "categories"
   );
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<CostCategory[]>([]);
   const [costItems, setCostItems] = useState<CostItem[]>([]);
-  const [units, setUnits] = useState<CostUnit[]>([]);
-  const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] =
     useState<string>("");
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<CostItem | null>(null);
 
   const navigate = useNavigate();
 
@@ -29,9 +28,6 @@ const CostManagement: React.FC<CostManagementProps> = () => {
     } else if (activeTab === "items") {
       loadCostItems();
       loadCategories(); // Kategori filtresi için kategorileri de yükle
-      loadUnits(); // Birim adlarını göstermek için birimleri de yükle
-    } else if (activeTab === "units") {
-      loadUnits();
     }
   }, [activeTab]);
 
@@ -61,19 +57,6 @@ const CostManagement: React.FC<CostManagementProps> = () => {
     }
   };
 
-  const loadUnits = async () => {
-    try {
-      setLoading(true);
-      const data = await costService.getCostUnits();
-      setUnits(data);
-    } catch (error) {
-      console.error("❌ Failed to load units:", error);
-      alert("Birimler yüklenemedi!");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const formatDate = (dateString: string): string => {
     return new Date(dateString).toLocaleDateString("tr-TR");
   };
@@ -84,18 +67,27 @@ const CostManagement: React.FC<CostManagementProps> = () => {
     return category?.categoryName || "-";
   };
 
-  // Birim bilgisini bul
-  const getUnitInfo = (
-    unitId?: string
-  ): { unitName: string; unitCode: string } | null => {
-    if (!unitId) return null;
-    const unit = units.find((u) => u.costUnitId === unitId);
-    console.log("🔍 getUnitInfo called:", {
-      unitId,
-      foundUnit: unit,
-      allUnits: units.length,
-    });
-    return unit ? { unitName: unit.unitName, unitCode: unit.unitCode } : null;
+  const handleEditItem = (item: CostItem) => {
+    setEditingItem(item);
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (updatedItem: CostItem) => {
+    if (!editingItem) return;
+
+    try {
+      setLoading(true);
+      await costService.updateCostItem(editingItem.costItemId, updatedItem);
+      alert("Maliyet kalemi başarıyla güncellendi!");
+      setEditModalOpen(false);
+      setEditingItem(null);
+      loadCostItems();
+    } catch (error) {
+      console.error("Failed to update cost item:", error);
+      alert("Maliyet kalemi güncellenemedi!");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -127,12 +119,6 @@ const CostManagement: React.FC<CostManagementProps> = () => {
             onClick={() => setActiveTab("items")}
           >
             Maliyet Kalemleri
-          </button>
-          <button
-            className={`tab-button ${activeTab === "units" ? "active" : ""}`}
-            onClick={() => setActiveTab("units")}
-          >
-            Birimler
           </button>
         </div>
       </div>
@@ -230,9 +216,6 @@ const CostManagement: React.FC<CostManagementProps> = () => {
                   <tr>
                     <th>Kalem Adı</th>
                     <th>Kategori</th>
-                    <th>Birim 1</th>
-                    <th>Birim 2</th>
-                    <th>3. Birim (Ref)</th>
                     <th>Birim Fiyat</th>
                     <th>Döviz</th>
                     <th>Fire %</th>
@@ -249,16 +232,6 @@ const CostManagement: React.FC<CostManagementProps> = () => {
                         : true
                     )
                     .map((item) => {
-                      console.log("🔍 Cost item:", {
-                        itemName: item.itemName,
-                        costUnitId: item.costUnitId,
-                        costUnit: item.costUnit,
-                        unit: item.unit,
-                        unitName: item.unitName,
-                        category: item.costCategory?.categoryName,
-                        fullItem: item,
-                      });
-
                       return (
                         <tr key={item.costItemId}>
                           <td>
@@ -276,83 +249,6 @@ const CostManagement: React.FC<CostManagementProps> = () => {
                               {item.costCategory?.categoryName ||
                                 getCategoryName(item.costCategoryId)}
                             </span>
-                          </td>
-                          <td>
-                            {item.quantity1Label ||
-                              (() => {
-                                const unit1 =
-                                  item.costUnit || getUnitInfo(item.costUnitId);
-                                if (unit1) {
-                                  return (
-                                    <>
-                                      {unit1.unitName}
-                                      <span
-                                        style={{
-                                          fontSize: "0.85em",
-                                          color: "#666",
-                                          marginLeft: "4px",
-                                        }}
-                                      >
-                                        ({unit1.unitCode})
-                                      </span>
-                                    </>
-                                  );
-                                }
-                                return item.unit || item.unitName || "-";
-                              })()}
-                          </td>
-                          <td>
-                            {item.quantity2Label ||
-                              (() => {
-                                const unit2 =
-                                  item.costUnit2 ||
-                                  getUnitInfo(item.costUnitId2);
-                                if (unit2) {
-                                  return (
-                                    <>
-                                      {unit2.unitName}
-                                      <span
-                                        style={{
-                                          fontSize: "0.85em",
-                                          color: "#666",
-                                          marginLeft: "4px",
-                                        }}
-                                      >
-                                        ({unit2.unitCode})
-                                      </span>
-                                    </>
-                                  );
-                                }
-                                return <span style={{ color: "#ccc" }}>-</span>;
-                              })()}
-                          </td>
-                          <td>
-                            {(() => {
-                              const unit3 =
-                                item.costUnit3 || getUnitInfo(item.costUnitId3);
-                              if (unit3) {
-                                return (
-                                  <span
-                                    style={{
-                                      color: "#856404",
-                                      fontSize: "0.9em",
-                                    }}
-                                  >
-                                    {unit3.unitName}
-                                    <span
-                                      style={{
-                                        fontSize: "0.85em",
-                                        color: "#999",
-                                        marginLeft: "4px",
-                                      }}
-                                    >
-                                      ({unit3.unitCode})
-                                    </span>
-                                  </span>
-                                );
-                              }
-                              return <span style={{ color: "#ccc" }}>-</span>;
-                            })()}
                           </td>
                           <td className="price-cell">
                             {formatCurrency(item.unitPrice, item.currency)}
@@ -383,54 +279,26 @@ const CostManagement: React.FC<CostManagementProps> = () => {
                           <td>
                             <div className="action-buttons">
                               <button
-                                className="edit-button"
-                                onClick={() => {
-                                  alert(
-                                    "⚠️ Maliyet kalemi düzenleme backend tarafından desteklenmiyor.\n\nSadece fiyat güncellemesi yapabilirsiniz."
-                                  );
-                                }}
-                                title="Düzenleme desteklenmiyor - Sadece fiyat güncelleyebilirsiniz"
-                                style={{ opacity: 0.5, cursor: "not-allowed" }}
+                                className="action-btn edit-btn"
+                                onClick={() => handleEditItem(item)}
+                                title="Düzenle"
                               >
-                                ✏️
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                                Düzenle
                               </button>
+
                               <button
-                                className="price-update-button"
-                                onClick={async () => {
-                                  const newPriceStr = prompt(
-                                    `"${item.itemName}" için yeni fiyat girin:\n\nMevcut fiyat: ${item.unitPrice} ${item.currency}`,
-                                    item.unitPrice.toString()
-                                  );
-
-                                  if (newPriceStr === null) return; // İptal
-
-                                  const newPrice = parseFloat(newPriceStr);
-                                  if (isNaN(newPrice) || newPrice < 0) {
-                                    alert("Geçersiz fiyat!");
-                                    return;
-                                  }
-
-                                  try {
-                                    await costService.updateCostItemPrice(
-                                      item.costItemId,
-                                      newPrice
-                                    );
-                                    alert("Fiyat başarıyla güncellendi!");
-                                    loadCostItems(); // Listeyi yenile
-                                  } catch (error) {
-                                    console.error(
-                                      "Failed to update price:",
-                                      error
-                                    );
-                                    alert("Fiyat güncellenemedi!");
-                                  }
-                                }}
-                                title="Fiyat Güncelle"
-                              >
-                                💰
-                              </button>
-                              <button
-                                className="delete-button"
+                                className="action-btn delete-btn"
                                 onClick={async () => {
                                   if (
                                     !window.confirm(
@@ -458,7 +326,20 @@ const CostManagement: React.FC<CostManagementProps> = () => {
                                 }}
                                 title="Sil"
                               >
-                                🗑️
+                                <svg
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                  <line x1="10" y1="11" x2="10" y2="17" />
+                                  <line x1="14" y1="11" x2="14" y2="17" />
+                                </svg>
+                                Sil
                               </button>
                             </div>
                           </td>
@@ -470,61 +351,170 @@ const CostManagement: React.FC<CostManagementProps> = () => {
             </div>
           </div>
         )}
-
-        {activeTab === "units" && (
-          <div className="units-section">
-            <div className="section-header">
-              <h2>Birimler</h2>
-              <button
-                className="create-button"
-                onClick={() => setIsUnitModalOpen(true)}
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
-                </svg>
-                Yeni Birim
-              </button>
-            </div>
-
-            <div className="units-grid">
-              {units.map((unit) => (
-                <div key={unit.costUnitId} className="unit-card">
-                  <div className="unit-header">
-                    <h3>{unit.unitName}</h3>
-                    <span className="unit-code">{unit.unitCode}</span>
-                  </div>
-                  {unit.description && (
-                    <p className="unit-description">{unit.description}</p>
-                  )}
-                  <div className="unit-footer">
-                    <span className="unit-order">
-                      Sıra: #{unit.displayOrder}
-                    </span>
-                    <span
-                      className={`status-badge ${
-                        unit.isActive ? "active" : "inactive"
-                      }`}
-                    >
-                      {unit.isActive ? "Aktif" : "Pasif"}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
-      <CostUnitModal
-        isOpen={isUnitModalOpen}
-        onClose={() => setIsUnitModalOpen(false)}
-        onSuccess={loadUnits}
-      />
+      {/* Edit Modal */}
+      {editModalOpen && editingItem && (
+        <EditCostItemModal
+          item={editingItem}
+          categories={categories}
+          onClose={() => {
+            setEditModalOpen(false);
+            setEditingItem(null);
+          }}
+          onSave={handleSaveEdit}
+        />
+      )}
+    </div>
+  );
+};
+
+interface EditCostItemModalProps {
+  item: CostItem;
+  categories: CostCategory[];
+  onClose: () => void;
+  onSave: (item: CostItem) => void;
+}
+
+const EditCostItemModal: React.FC<EditCostItemModalProps> = ({
+  item,
+  categories,
+  onClose,
+  onSave,
+}) => {
+  const [formData, setFormData] = useState<CostItem>({ ...item });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Maliyet Kalemini Düzenle</h2>
+          <button className="close-button" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="modal-body">
+          <div className="form-group">
+            <label>Kalem Adı *</label>
+            <input
+              type="text"
+              value={formData.itemName}
+              onChange={(e) =>
+                setFormData({ ...formData, itemName: e.target.value })
+              }
+              required
+            />
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Kategori *</label>
+              <select
+                value={formData.costCategoryId}
+                onChange={(e) =>
+                  setFormData({ ...formData, costCategoryId: e.target.value })
+                }
+                required
+              >
+                <option value="">Seçiniz</option>
+                {categories.map((cat) => (
+                  <option key={cat.costCategoryId} value={cat.costCategoryId}>
+                    {cat.categoryName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Birim Fiyat *</label>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.unitPrice}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    unitPrice: parseFloat(e.target.value),
+                  })
+                }
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Döviz *</label>
+              <select
+                value={formData.currency}
+                onChange={(e) =>
+                  setFormData({ ...formData, currency: e.target.value })
+                }
+                required
+              >
+                <option value="TRY">TRY</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Tedarikçi</label>
+              <input
+                type="text"
+                value={formData.supplier || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, supplier: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Fire %</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                value={formData.wastagePercentage || ""}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    wastagePercentage: parseFloat(e.target.value) || undefined,
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Açıklama</label>
+            <textarea
+              value={formData.description || ""}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
+              rows={3}
+            />
+          </div>
+
+          <div className="modal-actions">
+            <button type="button" onClick={onClose} className="btn-secondary">
+              İptal
+            </button>
+            <button type="submit" className="btn-primary">
+              Kaydet
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

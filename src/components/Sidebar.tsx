@@ -15,6 +15,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
   const isManager = user && user.role === "Manager";
   const isModelist = user && user.role === "Modelist";
+  const isAccountant = user && user.role === "Muhasebeci";
+  const isProduction = user && user.role === "Üretim";
+  const isSecretary = user && user.role === "Sekreterya";
 
   // Gruplandırılmış menü yapısı
   const menuGroups = [
@@ -22,6 +25,29 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       groupId: "siparis",
       groupTitle: "Sipariş Yönetimi",
       items: [
+        {
+          id: "new-order",
+          title: "Yeni Sipariş",
+          icon: (
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#27ae60"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="12" y1="11" x2="12" y2="17"></line>
+              <line x1="9" y1="14" x2="15" y2="14"></line>
+            </svg>
+          ),
+          path: "/orders/new",
+          description: "Yeni sipariş oluştur",
+        },
         {
           id: "orders",
           title: "Siparişler",
@@ -47,54 +73,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           description: "Sipariş yönetimi ve takibi",
         },
         {
-          id: "modelist-job-list",
-          title: "Desinatör İş Listesi",
-          icon: (
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#27ae60"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <path d="M8 6h8"></path>
-              <path d="M8 10h8"></path>
-              <path d="M8 14h6"></path>
-            </svg>
-          ),
-          path: "/modelist-job-list",
-          description: "Desinatörlerin yaptığı işlerin listesi",
-        },
-        {
-          id: "modelist-job-tracker",
-          title: "Desinatör İş Takibi",
-          icon: (
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <path d="M8 6h8"></path>
-              <path d="M8 10h8"></path>
-              <path d="M8 14h6"></path>
-            </svg>
-          ),
-          path: "/modelist-job-tracker",
-          description: "Desinatörlerin iş takibi ve fotoğraf ekleme",
-        },
-        {
-          id: "modelist-orders",
-          title: "Modelist Siparişlerim",
+          id: "modelist-my-orders",
+          title: "Üzerinizdeki İşler",
           icon: (
             <svg
               width="20"
@@ -108,14 +88,34 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             >
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
               <circle cx="12" cy="7" r="4"></circle>
-              <path
-                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                opacity="0.5"
-              ></path>
             </svg>
           ),
-          path: "/modelist-orders",
-          description: "Size atanan siparişlerin listesi ve durum takibi",
+          path: "/modelist-my-orders",
+          description: "Size atanan siparişler",
+        },
+        {
+          id: "accounting-orders",
+          title: "Fatura Yönetimi",
+          icon: (
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#f39c12"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <line x1="12" y1="9" x2="12" y2="9"></line>
+            </svg>
+          ),
+          path: "/accounting-orders",
+          description: "Fatura bilgisi ekleme",
         },
       ],
     },
@@ -168,6 +168,77 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       ],
     },
     {
+      groupId: "tanim",
+      groupTitle: "Tanımlamalar",
+      items: [
+        {
+          id: "firms",
+          title: "Firma Yönetimi",
+          icon: (
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+          ),
+          path: "/firms",
+          description: "Firma ekleme, düzenleme ve yönetimi",
+        },
+        {
+          id: "settings",
+          title: "Sistem Ayarları",
+          icon: (
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v6m0 6v6m10-9h-6M7 12H1m15.4-6.4l-4.2 4.2m0 4.4l4.2 4.2M6.6 6.6l4.2 4.2m0 4.4l-4.2 4.2"></path>
+            </svg>
+          ),
+          path: "/settings",
+          description: "Kar marjı ve genel gider ayarları",
+        },
+        {
+          id: "user-management",
+          title: "Kullanıcı Yönetimi",
+          icon: (
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          ),
+          path: "/user-management",
+          description: "Kullanıcıları görüntüle ve düzenle",
+        },
+      ],
+    },
+    {
       groupId: "maliyet",
       groupTitle: "Maliyet & Raporlar",
       items: [
@@ -215,8 +286,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <path d="M12 10h0"></path>
             </svg>
           ),
-          path: "/models",
-          description: "Model bazlı maliyet hesaplamaları",
+          path: "/model-costs",
+          description: "Firma bazlı model maliyet hesaplamaları",
         },
         {
           id: "reports",
@@ -248,31 +319,40 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
   // Item görünürlük kontrolü
   const isItemVisible = (itemId: string): boolean => {
-    // workshops, cost, model-costs, reports ve workshop-kanban sadece Manager'a göster
+    // new-order - Sadece Manager ve Sekreterya görebilir
+    if (itemId === "new-order") {
+      return isManager || isSecretary || false;
+    }
+    // firms - Manager ve Muhasebeci görebilir
+    if (itemId === "firms") {
+      return isManager || isAccountant || false;
+    }
+    // settings, workshops, cost, model-costs, reports, user-management sadece Manager'a göster
     if (
+      itemId === "settings" ||
       itemId === "workshops" ||
       itemId === "cost" ||
       itemId === "model-costs" ||
       itemId === "reports" ||
-      itemId === "workshop-kanban"
+      itemId === "user-management"
     ) {
       return isManager || false;
     }
-    // modelist-job-list sadece Manager'a göster
-    if (itemId === "modelist-job-list") {
-      return isManager || false;
-    }
-    // modelist-job-tracker sadece Modelist'e göster
-    if (itemId === "modelist-job-tracker") {
+    // modelist-my-orders sadece Modelist'e göster
+    if (itemId === "modelist-my-orders") {
       return isModelist || false;
     }
-    // modelist-orders sadece Modelist'e göster
-    if (itemId === "modelist-orders") {
-      return isModelist || false;
+    // accounting-orders Manager ve Muhasebeci görebilir
+    if (itemId === "accounting-orders") {
+      return isManager || isAccountant || false;
     }
-    // orders ekranını Modelist kullanıcılarına gösterme
+    // orders ekranını Manager, Modelist ve Üretim rolü görebilir (Muhasebeci görmez)
     if (itemId === "orders") {
-      return !isModelist;
+      return isManager || isModelist || isProduction || false;
+    }
+    // workshop-kanban sadece Manager'a göster
+    if (itemId === "workshop-kanban") {
+      return isManager || false;
     }
     return true;
   };
@@ -338,13 +418,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           {menuGroups.map((group) => {
             // Gruptaki görünür itemları filtrele
             const visibleItems = group.items.filter((item) => {
-              // Modelist rolü için sadece modelist ile ilgili sayfaları göster
-              if (isModelist) {
-                return (
-                  item.id === "modelist-job-tracker" ||
-                  item.id === "modelist-orders"
-                );
-              }
               return isItemVisible(item.id);
             });
 
@@ -387,42 +460,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         </nav>
 
         <div className="sidebar-footer">
-          {/* Yönetim bölümü - Modelist için gizle */}
-          {!isModelist && (
-            <>
-              <div className="nav-section-title">Yönetim</div>
-              {/* Register button - sadece Manager için */}
-              {isManager && (
-                <button
-                  className={`nav-item register-button ${
-                    location.pathname === "/register" ? "nav-item-active" : ""
-                  }`}
-                  onClick={() => handleNavigate("/register")}
-                  title="Yeni kullanıcı ekle"
-                >
-                  <span className="nav-icon">
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                      <circle cx="8.5" cy="7" r="4"></circle>
-                      <line x1="20" y1="8" x2="20" y2="14"></line>
-                      <line x1="23" y1="11" x2="17" y2="11"></line>
-                    </svg>
-                  </span>
-                  <span className="nav-title">Kullanıcı Ekle</span>
-                </button>
-              )}
-            </>
-          )}
-
           <button className="logout-button" onClick={handleLogout}>
             <span className="nav-icon">
               <svg

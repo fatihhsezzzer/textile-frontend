@@ -63,6 +63,18 @@
 /* Marka/Logo Bölümü */
 .header-brand {
   display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-logo {
+  height: 45px;
+  width: auto;
+  object-fit: contain;
+}
+
+.header-text {
+  display: flex;
   flex-direction: column;
   gap: 2px;
 }

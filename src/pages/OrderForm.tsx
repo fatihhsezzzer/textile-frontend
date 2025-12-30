@@ -153,7 +153,6 @@ const OrderForm: React.FC = () => {
       if (history.priceHistory && history.priceHistory.length > 0) {
         setShowPriceHistoryModal(true);
       } else {
-        console.log("⚠️ Bu model için fiyat geçmişi bulunamadı");
       }
     } catch (error) {
       console.error("❌ Fiyat geçmişi yüklenemedi:", error);
@@ -181,12 +180,6 @@ const OrderForm: React.FC = () => {
     }));
 
     setShowPriceHistoryModal(false);
-
-    console.log("✅ Fiyat seçildi:", {
-      price: priceItem.price,
-      unit: orderUnit,
-      currency: priceItem.priceCurrency,
-    });
   };
 
   const loadOrderForEdit = async (id: string) => {
@@ -283,15 +276,45 @@ const OrderForm: React.FC = () => {
         throw new Error("Seçili model bulunamadı");
       }
 
-      // Atölye seçilmediyse "Atanmamış İşler" atölyesini bul ve ata
+      // Atölye otomatik ataması
       let workshopToUse = selectedWorkshop;
-      if (!workshopToUse) {
+
+      // Yeni sipariş oluştururken VEYA workshop seçili değilse otomatik ata
+      if (!isEditMode || !workshopToUse) {
         try {
           const workshops = await workshopService.getAll();
-          workshopToUse =
-            workshops.find(
-              (w) => w.name && w.name.toLowerCase().includes("atanmamış")
-            ) || null;
+
+          // Eğer digital/dijital/sticket/bsn/numune teknikleri seçildiyse desinatör atölyesini ata
+          const hasDesignTechnic = selectedTechnics.some(
+            (t) =>
+              t.name.toLowerCase().includes("digital") ||
+              t.name.toLowerCase().includes("dijital") ||
+              t.name.toLowerCase().includes("sticket") ||
+              t.name.toLowerCase().includes("sticker") ||
+              t.name.toLowerCase().includes("bsn") ||
+              t.name.toLowerCase().includes("numune")
+          );
+
+          if (hasDesignTechnic) {
+            // Desinatör atölyesini bul
+            workshopToUse =
+              workshops.find(
+                (w) => w.name && w.name.toLowerCase().includes("desinatör")
+              ) || null;
+
+            if (!workshopToUse) {
+              workshopToUse =
+                workshops.find(
+                  (w) => w.name && w.name.toLowerCase().includes("atanmamış")
+                ) || null;
+            }
+          } else {
+            // Atanmamış İşler atölyesini bul
+            workshopToUse =
+              workshops.find(
+                (w) => w.name && w.name.toLowerCase().includes("atanmamış")
+              ) || null;
+          }
         } catch (error) {
           console.error("❌ Atölyeler yüklenemedi:", error);
         }
@@ -339,16 +362,6 @@ const OrderForm: React.FC = () => {
         orderTechnics: orderTechnics,
         images: [],
       };
-
-      console.log("📦 ORDER UNIT VALUE:", newOrder.unit);
-      console.log("📦 ORDER UNIT TYPE:", typeof newOrder.unit);
-      console.log("📦 OrderUnit.Adet =", OrderUnit.Adet);
-      console.log("📦 OrderUnit.Metre =", OrderUnit.Metre);
-      console.log("📦 OrderUnit.Takim =", OrderUnit.Takim);
-      console.log("🚀 Submitting order with data:", orderData);
-      console.log("👤 Selected operator:", selectedOperator);
-      console.log("🏭 Selected workshop:", selectedWorkshop);
-
       let resultOrder: Order;
 
       if (isEditMode && editingOrder) {
@@ -403,13 +416,7 @@ const OrderForm: React.FC = () => {
         resultOrder = updateData as unknown as Order;
       } else {
         resultOrder = await orderService.create(orderData as any);
-        console.log("✅ Order created successfully:", resultOrder);
-        console.log(
-          "✅ Full response data:",
-          JSON.stringify(resultOrder, null, 2)
-        );
         if (resultOrder.qrCodeUrl) {
-          console.log("✅ QR Code URL received:", resultOrder.qrCodeUrl);
         } else {
           console.warn("⚠️ QR Code URL not found in response");
         }
@@ -433,10 +440,6 @@ const OrderForm: React.FC = () => {
         let qrDataUrl: string | null = null;
         if (resultOrder.qrCodeUrl) {
           try {
-            console.log(
-              "🔄 Generating QR code from URL:",
-              resultOrder.qrCodeUrl
-            );
             qrDataUrl = await QRCode.toDataURL(resultOrder.qrCodeUrl, {
               width: 400,
               margin: 2,
@@ -446,7 +449,6 @@ const OrderForm: React.FC = () => {
               },
               errorCorrectionLevel: "H",
             });
-            console.log("✅ QR code generated successfully");
           } catch (qrError) {
             console.error("❌ Failed to generate QR code:", qrError);
           }
@@ -611,13 +613,38 @@ const OrderForm: React.FC = () => {
                   type="text"
                   value={selectedModel ? selectedModel.modelName : ""}
                   readOnly
-                  placeholder="Model seçmek için tıklayın"
-                  onClick={() => setShowModelModal(true)}
+                  placeholder={
+                    selectedFirm
+                      ? "Model seçmek için tıklayın"
+                      : "Önce firma seçiniz"
+                  }
+                  onClick={() => {
+                    if (!selectedFirm) {
+                      alert("Lütfen önce bir firma seçiniz!");
+                      return;
+                    }
+                    setShowModelModal(true);
+                  }}
+                  style={{
+                    cursor: selectedFirm ? "pointer" : "not-allowed",
+                    opacity: selectedFirm ? 1 : 0.6,
+                  }}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowModelModal(true)}
+                  onClick={() => {
+                    if (!selectedFirm) {
+                      alert("Lütfen önce bir firma seçiniz!");
+                      return;
+                    }
+                    setShowModelModal(true);
+                  }}
                   className="select-button"
+                  disabled={!selectedFirm}
+                  style={{
+                    opacity: selectedFirm ? 1 : 0.5,
+                    cursor: selectedFirm ? "pointer" : "not-allowed",
+                  }}
                 >
                   Seç
                 </button>
@@ -735,95 +762,52 @@ const OrderForm: React.FC = () => {
           </div>
 
           <div className="form-section">
-            <h3>{isEditMode ? "Atölye ve Operatör" : "Teknikler"}</h3>
+            <h3>Teknikler</h3>
 
-            {/* Atölye ve Operatör sadece düzenleme modunda gösterilir */}
-            {isEditMode && (
-              <>
-                <div className="form-group">
-                  <label>Atölye</label>
-                  <div className="select-with-button">
-                    <input
-                      type="text"
-                      value={selectedWorkshop?.name || ""}
-                      readOnly
-                      placeholder="Atölye seçmek için tıklayın"
-                      onClick={() => setShowWorkshopModal(true)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowWorkshopModal(true)}
-                      className="select-button"
-                    >
-                      Seç
-                    </button>
-                    {selectedWorkshop && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedWorkshop(null)}
-                        className="clear-button"
-                      >
-                        Temizle
-                      </button>
-                    )}
+            {/* Düzenleme modunda ve modelist atanmışsa bilgi kutusu göster */}
+            {isEditMode && editingOrder?.modelistUser && (
+              <div
+                style={{
+                  background: "#e3f2fd",
+                  border: "1px solid #2196f3",
+                  borderRadius: "8px",
+                  padding: "12px 16px",
+                  marginBottom: "20px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                }}
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#2196f3"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      color: "#1976d2",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Desinatör Atanmış
+                  </div>
+                  <div style={{ fontSize: "13px", color: "#555" }}>
+                    {editingOrder.modelistUser.firstName}{" "}
+                    {editingOrder.modelistUser.lastName}
                   </div>
                 </div>
-
-                <div className="form-group">
-                  <label>Operatör</label>
-                  <div className="select-with-button">
-                    <input
-                      type="text"
-                      value={
-                        selectedOperator
-                          ? `${selectedOperator.firstName} ${selectedOperator.lastName}`
-                          : ""
-                      }
-                      readOnly
-                      placeholder={
-                        !selectedWorkshop
-                          ? "Önce atölye seçiniz"
-                          : "Operatör seçmek için tıklayın"
-                      }
-                      onClick={() => {
-                        if (selectedWorkshop) {
-                          setShowOperatorModal(true);
-                        }
-                      }}
-                      disabled={!selectedWorkshop}
-                      style={{
-                        cursor: !selectedWorkshop ? "not-allowed" : "pointer",
-                        opacity: !selectedWorkshop ? 0.6 : 1,
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (selectedWorkshop) {
-                          setShowOperatorModal(true);
-                        }
-                      }}
-                      className="select-button"
-                      disabled={!selectedWorkshop}
-                      style={{
-                        cursor: !selectedWorkshop ? "not-allowed" : "pointer",
-                        opacity: !selectedWorkshop ? 0.6 : 1,
-                      }}
-                    >
-                      Seç
-                    </button>
-                    {selectedOperator && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedOperator(null)}
-                        className="clear-button"
-                      >
-                        Temizle
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </>
+              </div>
             )}
 
             <div className="form-group">
@@ -891,7 +875,9 @@ const OrderForm: React.FC = () => {
                 t.name.toLowerCase().includes("digital") ||
                 t.name.toLowerCase().includes("dijital") ||
                 t.name.toLowerCase().includes("sticket") ||
-                t.name.toLowerCase().includes("sticker")
+                t.name.toLowerCase().includes("sticker") ||
+                t.name.toLowerCase().includes("bsn") ||
+                t.name.toLowerCase().includes("numune")
             ) && (
               <div className="form-group">
                 <label>Modelist</label>
@@ -1076,6 +1062,8 @@ const OrderForm: React.FC = () => {
             loadModelCostsAndAutoFill(model.modelId);
           }
         }}
+        firmId={selectedFirm?.firmId}
+        selectedFirm={selectedFirm}
       />
       <WorkshopModal
         isOpen={showWorkshopModal}

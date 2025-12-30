@@ -427,7 +427,9 @@
 .edit-button,
 .delete-button,
 .image-button,
-.detail-button {
+.detail-button,
+.qr-button,
+.transfer-button {
   padding: 6px 8px;
   border: none;
   border-radius: 6px;
@@ -446,7 +448,9 @@
 .edit-button svg,
 .delete-button svg,
 .image-button svg,
-.detail-button svg {
+.detail-button svg,
+.qr-button svg,
+.transfer-button svg {
   width: 14px;
   height: 14px;
   position: relative;
@@ -516,10 +520,50 @@
   transform: scale(1.1);
 }
 
+.qr-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
+  gap: 4px;
+}
+
+.qr-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+}
+
+.qr-button:hover svg {
+  transform: scale(1.1);
+}
+
+.transfer-button {
+  background: #2563eb;
+  color: white;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  gap: 6px;
+  font-weight: 300;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.transfer-button:hover {
+  background: #1d4ed8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  border-color: rgba(37, 99, 235, 0.3);
+}
+
+.transfer-button:hover svg {
+  transform: translateX(2px);
+}
+
 .edit-button:active,
 .delete-button:active,
 .image-button:active,
-.detail-button:active {
+.detail-button:active,
+.qr-button:active,
+.transfer-button:active {
   transform: translateY(0);
 }
 
@@ -1451,7 +1495,7 @@
   padding: 12px 16px;
   background: #f7fafc;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
@@ -1555,8 +1599,6 @@
   }
 
   .action-buttons button {
-    width: 30px;
-    height: 30px;
     min-width: 30px;
     min-height: 30px;
   }
@@ -1769,4 +1811,52 @@
     align-self: stretch;
     margin-top: 8px;
   }
+}
+
+/* Tekniks List in Table */
+.orders-table .technics-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 200px;
+}
+
+.orders-table .technic-tag {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.orders-table .no-technic {
+  color: #ccc;
+  font-style: italic;
+}
+
+.orders-table .technics-expandable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.orders-table .technics-toggle {
+  background: none;
+  border: none;
+  color: #667eea;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.orders-table .technics-toggle:hover {
+  background: #eef2ff;
+  color: #4f46e5;
 }

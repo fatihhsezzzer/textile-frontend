@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = "https://api.bulutalbum.com/api"; // HTTPS geri döndü
+const API_BASE_URL = "https://localhost:7025/api"; // HTTPS geri döndü
 
 // HTTPS sertifika doğrulamasını geçici olarak gevşet (sadece development)
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -27,7 +27,6 @@ try {
     const tokenParts = existingToken.split(".");
     if (tokenParts.length === 3) {
       api.defaults.headers.common["Authorization"] = `Bearer ${existingToken}`;
-      console.log("API: Set default Authorization header from localStorage");
     } else {
       console.warn("API: Invalid token format in localStorage, clearing");
       localStorage.removeItem("token");
@@ -43,20 +42,12 @@ try {
 // Request interceptor to add token
 api.interceptors.request.use(
   (config) => {
-    console.log("Making API request:", {
-      method: config.method,
-      url: config.url,
-      baseURL: config.baseURL,
-      hasAuthHeader: !!config.headers.Authorization,
-    });
-
     const token = localStorage.getItem("token");
     if (token && token !== "undefined" && token !== "null") {
       // Basit token format kontrolü
       const tokenParts = token.split(".");
       if (tokenParts.length === 3) {
         config.headers.Authorization = `Bearer ${token}`;
-        console.log("Request interceptor: Added Authorization header");
       } else {
         console.warn(
           "Request interceptor: Invalid token format, clearing localStorage"
@@ -65,7 +56,6 @@ api.interceptors.request.use(
         localStorage.removeItem("user");
       }
     } else {
-      console.log("Request interceptor: No valid token found");
     }
     return config;
   },
@@ -78,7 +68,6 @@ api.interceptors.request.use(
 // Response interceptor to handle errors
 api.interceptors.response.use(
   (response) => {
-    console.log("API Response:", response);
     return response;
   },
   (error) => {
@@ -135,8 +124,6 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 401) {
-      console.log("401 Unauthorized - Token invalid or expired");
-
       // Token'ı ve user'ı localStorage'dan temizle
       localStorage.removeItem("token");
       localStorage.removeItem("user");
@@ -146,7 +133,6 @@ api.interceptors.response.use(
 
       // Login sayfasına yönlendir
       if (window.location.pathname !== "/login") {
-        console.log("Redirecting to login due to 401");
         window.location.href = "/login";
       }
     }

@@ -12,6 +12,7 @@ import {
   ExchangeRate,
   Currency,
   User,
+  Settings,
 } from "../types";
 
 // Cost service'ini import edelim
@@ -41,7 +42,7 @@ export const firmService = {
 
   // Firma kodu ile firma getir
   getFirmByCode: async (firmCode: string): Promise<Firm> => {
-    const response = await api.get(`/firm/by-code/${firmCode}`);
+    const response = await api.get(`/firm/code/${firmCode}`);
     return response.data;
   },
 
@@ -103,12 +104,11 @@ const denormalizeOrderStatus = (status: OrderStatus): number => {
 
 // Order objelerindeki status'u normalize et (backend -> frontend)
 const normalizeOrder = (order: any): Order => {
-  console.log("🔄 Normalizing order:", order);
-
   // Backend'den flat yapıda gelen veriyi nested yapıya çevir
   const normalized: Order = {
     orderId: order.orderId,
     acceptanceDate: order.acceptanceDate,
+    modelistUserId: order.modelistUserId,
     completionDate: order.completionDate,
     deadline: order.deadline,
     firmId: order.firmId,
@@ -193,6 +193,21 @@ const normalizeOrder = (order: any): Order => {
             workshop: order.workshop,
           }
         : undefined),
+    modelistUser:
+      order.modelistUser ||
+      (order.modelistUserName
+        ? {
+            userId: order.modelistUserId || "",
+            firstName:
+              order.modelistUserName.split(" ")[0] || order.modelistUserName,
+            lastName:
+              order.modelistUserName.split(" ").slice(1).join(" ") || "",
+            email: "",
+            role: "Modelist",
+            workshopId: undefined,
+            workshop: undefined,
+          }
+        : undefined),
     priority: order.priority,
     note: order.note,
     invoice: order.invoice,
@@ -235,7 +250,12 @@ const normalizeOrder = (order: any): Order => {
     createdBy: order.createdBy || "",
     updatedAt: order.updatedAt,
     updatedBy: order.updatedBy,
-    isActive: order.isActive !== undefined ? order.isActive : true,
+    isActive:
+      order.isActive !== undefined
+        ? order.isActive
+        : order.IsActive !== undefined
+        ? order.IsActive
+        : true,
   };
 
   return normalized;
@@ -259,6 +279,11 @@ export const orderService = {
     return response.data.map(normalizeOrder);
   },
 
+  getInvoiced: async (): Promise<Order[]> => {
+    const response = await api.get<Order[]>("/Order/invoiced");
+    return response.data.map(normalizeOrder);
+  },
+
   getById: async (id: string): Promise<Order> => {
     const response = await api.get<Order>(`/Order/${id}`);
     return normalizeOrder(response.data);
@@ -274,10 +299,6 @@ export const orderService = {
     };
     // status alanını gönderme
     delete backendOrder.status;
-    console.log(
-      "[OrderService] Yeni sipariş oluşturuluyor, gönderilen data:",
-      backendOrder
-    );
     const response = await api.post<any>("/Order", backendOrder);
     // Response'u normalize et
     return normalizeOrder(response.data);
@@ -287,6 +308,14 @@ export const orderService = {
     // Status'u numeric'e çevir ve gönder
     const backendOrder = denormalizeOrder(order);
     await api.put(`/Order/${id}`, backendOrder);
+  },
+
+  // Fatura bilgilerini güncelle
+  updateInvoice: async (
+    id: string,
+    data: { invoice: string; invoiceNumber: string }
+  ): Promise<void> => {
+    await api.put(`/Order/${id}/invoice`, data);
   },
 
   // Yeni atama endpointi (workshop/operator/status)
@@ -413,11 +442,6 @@ export const orderService = {
     newStatus: string;
     completionDate?: string;
   }> => {
-    console.log(
-      `🔄 DataService: Updating order ${orderId} with status:`,
-      status
-    );
-
     // String enum'u sayısal değere çevir (backend numeric enum bekliyor)
     const statusMap: { [key in OrderStatus]: number } = {
       [OrderStatus.Atanmadi]: 1,
@@ -431,17 +455,11 @@ export const orderService = {
 
     // Log if status is Tamamlandı (backend will handle completionDate automatically)
     if (status === OrderStatus.Tamamlandi) {
-      console.log(
-        `🎯 Status is Done - backend will set completion date automatically`
-      );
     }
 
     try {
       // Backend endpoint: PUT /Order/{id}/status beklenen body: [FromBody] OrderStatus status
       // Sadece sayısal enum değerini gönder (primitive value olarak)
-      console.log(
-        `🔄 Calling: PUT /Order/${orderId}/status with numeric status: ${numericStatus}`
-      );
       const response = await api.put(
         `/Order/${orderId}/status`,
         numericStatus,
@@ -451,7 +469,6 @@ export const orderService = {
           },
         }
       );
-      console.log("✅ Status update response:", response.data);
       return response.data;
     } catch (error: any) {
       console.error("❌ Status update failed:", error.response?.status);
@@ -501,6 +518,30 @@ export const workshopService = {
   getAll: async (): Promise<Workshop[]> => {
     const response = await api.get<Workshop[]>("/Workshop");
     return response.data;
+  },
+
+  getConnections: async (workshopId: string): Promise<any[]> => {
+    const response = await api.get(`/Workshop/${workshopId}/connections`);
+    console.log("🔌 Is array:", Array.isArray(response.data));
+    return response.data;
+  },
+
+  addConnection: async (
+    workshopId: string,
+    data: { targetWorkshopId: string; notes?: string }
+  ): Promise<any> => {
+    const response = await api.post(
+      `/Workshop/${workshopId}/connections`,
+      data
+    );
+    return response.data;
+  },
+
+  removeConnection: async (
+    workshopId: string,
+    connectionId: string
+  ): Promise<void> => {
+    await api.delete(`/Workshop/${workshopId}/connections/${connectionId}`);
   },
 
   create: async (workshop: Omit<Workshop, "workshopId">): Promise<Workshop> => {
@@ -569,9 +610,32 @@ export const exchangeRateService = {
 
 // User servisi - Modelist yönetimi
 export const userService = {
+  // Tüm kullanıcıları getir
+  getAll: async (): Promise<User[]> => {
+    const response = await api.get<User[]>("/User");
+    return response.data;
+  },
+
   // Aktif modelistleri getir
   getModelists: async (): Promise<User[]> => {
     const response = await api.get<User[]>("/User/modelists");
+    return response.data;
+  },
+
+  // Kullanıcı güncelle
+  update: async (
+    id: string,
+    userData: {
+      email?: string;
+      firstName?: string;
+      lastName?: string;
+      role?: string;
+      workshopId?: string | null;
+      isActive?: boolean;
+      password?: string;
+    }
+  ): Promise<User> => {
+    const response = await api.put<User>(`/User/${id}`, userData);
     return response.data;
   },
 };
@@ -607,5 +671,41 @@ export const modelistOrderService = {
     await api.put(`/Order/${orderId}/assign`, {
       orderStatusId: status,
     });
+  },
+};
+
+// Settings servisi
+export const settingsService = {
+  getAll: async (): Promise<Settings[]> => {
+    const response = await api.get<Settings[]>("/Settings");
+    return response.data;
+  },
+
+  getById: async (id: string): Promise<Settings> => {
+    const response = await api.get<Settings>(`/Settings/${id}`);
+    return response.data;
+  },
+
+  getDefault: async (): Promise<Settings> => {
+    const response = await api.get<Settings>("/Settings/default");
+    return response.data;
+  },
+
+  create: async (
+    settings: Omit<
+      Settings,
+      "settingsId" | "createdAt" | "createdBy" | "isActive"
+    >
+  ): Promise<Settings> => {
+    const response = await api.post<Settings>("/Settings", settings);
+    return response.data;
+  },
+
+  update: async (id: string, settings: Partial<Settings>): Promise<void> => {
+    await api.put(`/Settings/${id}`, settings);
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/Settings/${id}`);
   },
 };

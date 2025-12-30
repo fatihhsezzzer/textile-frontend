@@ -45,10 +45,22 @@ export const authService = {
     firstName: string;
     lastName: string;
     role: string;
+    workshopId?: string;
     isActive: boolean;
     createdBy: string;
   }): Promise<any> => {
     const response = await api.post("/User/register", userData);
+    return response.data;
+  },
+
+  changePassword: async (
+    oldPassword: string,
+    newPassword: string
+  ): Promise<any> => {
+    const response = await api.post("/User/change-password", {
+      oldPassword,
+      newPassword,
+    });
     return response.data;
   },
 
